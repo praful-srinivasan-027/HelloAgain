@@ -34,7 +34,7 @@ export function EndpointBar({
           value={inputUrl}
           onChange={(e) => setInputUrl(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="ws://127.0.0.1:8000/ws"
+          placeholder="ws://localhost:8000/ws"
           className="w-full bg-transparent text-zinc-100 font-mono text-[11.5px] outline-none placeholder:text-zinc-600"
           spellCheck={false}
         />

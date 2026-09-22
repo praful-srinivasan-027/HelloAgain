@@ -261,7 +261,7 @@ export function InspectorSidebar({
                 type="text"
                 value={customApiUrl}
                 onChange={(e) => setCustomApiUrl(e.target.value)}
-                placeholder="http://127.0.0.1:8000"
+                placeholder="http://localhost:8000"
                 className="w-full px-3 py-1.5 rounded-xl bg-white/5 border border-white/20 text-white font-mono text-[11px] focus:border-white outline-none"
               />
               <button

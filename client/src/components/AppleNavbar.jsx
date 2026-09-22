@@ -148,7 +148,7 @@ export function AppleNavbar({
             type="text"
             value={inputUrl}
             onChange={(e) => setInputUrl(e.target.value)}
-            placeholder="ws://127.0.0.1:8000/ws"
+            placeholder="ws://localhost:8000/ws"
             className="w-full bg-transparent text-[11.5px] font-mono text-white outline-none placeholder:text-white/30"
             spellCheck={false}
           />

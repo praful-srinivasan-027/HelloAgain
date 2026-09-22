@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from db.models import User
 from typing import Annotated
 from .schemas import TokenData
-from fastapi import HTTPException, Depends
+from fastapi import HTTPException,WebSocketException, status, Depends
 from pwdlib import PasswordHash
 from dotenv import load_dotenv
 from sqlalchemy import Select
@@ -22,6 +22,8 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 password_hash = PasswordHash.recommended()
+
+connection_registry = {}
 
 def verify_password(plain_password, hashed_password):
     return password_hash.verify(plain_password, hashed_password)
@@ -58,7 +60,7 @@ def create_access_token(id: int, email, expires_delta: timedelta|None = None):
     if expires_delta:
         expiry = datetime.now(timezone.utc) + expires_delta
     else:
-        expiry = datetime.now(timezone.utc) + timedelta(minutes=15)
+        expiry = datetime.now(timezone.utc) + timedelta(minutes=90)
     to_encode.update({"exp": expiry})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -70,11 +72,30 @@ def _create_token_payload(id, email):
     }
     return data
 
-async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
+async def get_current_user(token):
+    credentials_exception = WebSocketException(
+        code=status.WS_1008_POLICY_VIOLATION
+    )
+    print("TOKEN:", token)
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        id = payload.get("sub")
+        email = payload.get("email")
+        if id is None or email is None:
+            raise credentials_exception
+        token_data = TokenData(id=id, email=email)
+    except InvalidTokenError as e:
+        print(e)
+        raise credentials_exception
+    user = get_user(email_addr=token_data.email)
+    if user is None:
+        raise credentials_exception
+    return user
+
+async def get_current_user_http(token):
     credentials_exception = HTTPException(
-        status_code=401,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials"
     )
     print("TOKEN:", token)
     try:

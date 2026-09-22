@@ -151,15 +151,23 @@ export async function fetchMe(token) {
 }
 
 /**
- * Health check via GET /
+ * Fetch authenticated user email strictly via GET /email
  */
-export async function checkBackendHealth() {
+export async function fetchUserEmail() {
   const baseUrl = getApiBaseUrl();
-  const response = await fetch(`${baseUrl}/`, {
+  const response = await fetch(`${baseUrl}/email`, {
     method: 'GET',
+    credentials: 'include',
   });
+
   if (!response.ok) {
-    throw new Error(`Health check failed: ${response.status}`);
+    throw new Error(`Could not fetch user email: ${response.status}`);
   }
-  return response.json();
+
+  const emailData = await response.json();
+  if (typeof emailData === 'string') {
+    return emailData.replace(/^"(.*)"$/, '$1');
+  }
+  return emailData;
 }
+

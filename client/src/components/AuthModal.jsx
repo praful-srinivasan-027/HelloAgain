@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Lock, Mail, User, ArrowRight, AlertCircle, CheckCircle2, ShieldCheck, Sparkles, Loader2 } from 'lucide-react';
+import { X, Lock, Mail, User, ArrowRight, AlertCircle, CheckCircle2, Sparkles, Loader2 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 
 export function AuthModal() {
@@ -109,19 +109,6 @@ export function AuthModal() {
     }
   };
 
-  const fillDemoCredentials = (tab) => {
-    if (tab === 'login') {
-      setLoginEmail('demo@connectx.io');
-      setLoginPassword('DemoPassword123!');
-    } else {
-      const rand = Math.floor(100 + Math.random() * 900);
-      setRegUsername(`User_${rand}`);
-      setRegEmail(`user${rand}@connectx.io`);
-      setRegPassword('SecurePass123!');
-      setRegConfirmPassword('SecurePass123!');
-    }
-  };
-
   return (
     <AnimatePresence>
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
@@ -140,7 +127,7 @@ export function AuthModal() {
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 10 }}
           transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-          className="relative w-full max-w-md bg-[#000000] border border-white/20 rounded-[24px] shadow-2xl p-6 sm:p-8 z-10 text-white overflow-hidden"
+          className="relative w-full max-w-md glass-card rounded-2xl shadow-2xl p-6 sm:p-8 z-10 text-white overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           {/* Subtle Ambient Radial Top Light */}
@@ -156,16 +143,16 @@ export function AuthModal() {
 
           {/* Header */}
           <div className="flex flex-col items-center text-center mb-6">
-            <div className="w-12 h-12 rounded-2xl bg-white text-black flex items-center justify-center mb-3 shadow-[0_0_20px_rgba(255,255,255,0.15)]">
-              <ShieldCheck className="w-6 h-6 stroke-[2.2]" />
+            <div className="w-12 h-12 rounded-xl bg-white/10 border border-white/20 text-white flex items-center justify-center mb-3">
+              <Sparkles className="w-6 h-6 text-white" />
             </div>
-            <h2 className="text-[20px] font-semibold tracking-tight text-white">
-              {activeTab === 'login' ? 'Sign In to ConnectX' : 'Create an Account'}
+            <h2 className="text-[22px] font-semibold tracking-tight text-white">
+              {activeTab === 'login' ? 'Welcome back to HelloAgain' : 'Join HelloAgain'}
             </h2>
             <p className="text-[13px] text-white/60 mt-1 max-w-xs">
               {activeTab === 'login'
-                ? 'Authenticate with your email & password to access real-time messaging.'
-                : 'Register your unique identity in userTable with encrypted credentials.'}
+                ? 'Sign in to access your direct chats and realtime community.'
+                : 'Create your account to start messaging instantly.'}
             </p>
           </div>
 
@@ -174,24 +161,24 @@ export function AuthModal() {
             <button
               type="button"
               onClick={() => handleTabSwitch('login')}
-              className={`flex-1 py-1.5 text-[12.5px] font-medium rounded-full transition-all cursor-pointer ${
+              className={`flex-1 py-2 text-[13px] font-medium rounded-full transition-all cursor-pointer ${
                 activeTab === 'login'
                   ? 'bg-white text-black font-semibold shadow-sm'
                   : 'text-white/60 hover:text-white'
               }`}
             >
-              Sign In (POST /login)
+              Sign In
             </button>
             <button
               type="button"
               onClick={() => handleTabSwitch('register')}
-              className={`flex-1 py-1.5 text-[12.5px] font-medium rounded-full transition-all cursor-pointer ${
+              className={`flex-1 py-2 text-[13px] font-medium rounded-full transition-all cursor-pointer ${
                 activeTab === 'register'
                   ? 'bg-white text-black font-semibold shadow-sm'
                   : 'text-white/60 hover:text-white'
               }`}
             >
-              Register (POST /register)
+              Create Account
             </button>
           </div>
 
@@ -229,7 +216,7 @@ export function AuthModal() {
                     type="email"
                     value={loginEmail}
                     onChange={(e) => setLoginEmail(e.target.value)}
-                    placeholder="srinivasan@example.com"
+                    placeholder="email@example.com"
                     autoComplete="email"
                     required
                     className="w-full bg-white/5 border border-white/20 rounded-xl pl-10 pr-4 py-2.5 text-[13px] text-white placeholder:text-white/30 focus:border-white focus:bg-black outline-none transition-all"
@@ -272,16 +259,8 @@ export function AuthModal() {
                 )}
               </button>
 
-              {/* Demo Helper */}
-              <div className="pt-2 flex items-center justify-between text-[11.5px] text-white/50">
-                <button
-                  type="button"
-                  onClick={() => fillDemoCredentials('login')}
-                  className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  <span>Fill Sample Credentials</span>
-                </button>
+              {/* Helper link */}
+              <div className="pt-2 flex items-center justify-end text-[11.5px] text-white/50">
                 <button
                   type="button"
                   onClick={() => handleTabSwitch('register')}
@@ -299,7 +278,6 @@ export function AuthModal() {
               <div className="space-y-1.5">
                 <div className="flex justify-between">
                   <label className="text-[12px] font-medium text-white/70">Username</label>
-                  <span className="text-[10px] text-white/40 font-mono">Mapped[str(30)]</span>
                 </div>
                 <div className="relative flex items-center">
                   <User className="w-4 h-4 absolute left-3.5 text-white/40" />
@@ -307,7 +285,7 @@ export function AuthModal() {
                     type="text"
                     value={regUsername}
                     onChange={(e) => setRegUsername(e.target.value)}
-                    placeholder="Srinivasan027"
+                    placeholder="Username"
                     maxLength={30}
                     required
                     className="w-full bg-white/5 border border-white/20 rounded-xl pl-10 pr-4 py-2.5 text-[13px] text-white placeholder:text-white/30 focus:border-white focus:bg-black outline-none transition-all"
@@ -318,7 +296,6 @@ export function AuthModal() {
               <div className="space-y-1.5">
                 <div className="flex justify-between">
                   <label className="text-[12px] font-medium text-white/70">Email Address</label>
-                  <span className="text-[10px] text-white/40 font-mono">Unique[str(100)]</span>
                 </div>
                 <div className="relative flex items-center">
                   <Mail className="w-4 h-4 absolute left-3.5 text-white/40" />
@@ -375,7 +352,7 @@ export function AuthModal() {
                 {isLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Creating Account & Issuing JWT...</span>
+                    <span>Creating Account...</span>
                   </>
                 ) : (
                   <>
@@ -385,16 +362,8 @@ export function AuthModal() {
                 )}
               </button>
 
-              {/* Demo Helper */}
-              <div className="pt-2 flex items-center justify-between text-[11.5px] text-white/50">
-                <button
-                  type="button"
-                  onClick={() => fillDemoCredentials('register')}
-                  className="flex items-center gap-1 hover:text-white transition-colors cursor-pointer"
-                >
-                  <Sparkles className="w-3 h-3" />
-                  <span>Generate New Account</span>
-                </button>
+              {/* Helper link */}
+              <div className="pt-2 flex items-center justify-end text-[11.5px] text-white/50">
                 <button
                   type="button"
                   onClick={() => handleTabSwitch('login')}

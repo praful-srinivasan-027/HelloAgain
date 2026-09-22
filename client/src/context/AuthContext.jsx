@@ -3,6 +3,7 @@ import {
   loginUser,
   registerUser,
   fetchMe,
+  fetchUserEmail,
   decodeJwt,
   getApiBaseUrl,
   setApiBaseUrl,
@@ -27,8 +28,8 @@ export function AuthProvider({ children }) {
       if (decoded) {
         return {
           id: decoded.sub,
-          email: decoded.email,
-          username: localStorage.getItem('ps_username') || decoded.email.split('@')[0],
+          email: decoded.email || '',
+          username: localStorage.getItem('ps_username') || (decoded.email ? decoded.email.split('@')[0] : 'User'),
           exp: decoded.exp,
         };
       }
@@ -41,6 +42,26 @@ export function AuthProvider({ children }) {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [authModalInitialTab, setAuthModalInitialTab] = useState('login'); // 'login' | 'register'
   const [apiBaseUrl, setApiBaseUrlState] = useState(getApiBaseUrl());
+
+  const refreshUserEmail = useCallback(async () => {
+    try {
+      const fetchedEmail = await fetchUserEmail();
+      if (fetchedEmail && typeof fetchedEmail === 'string') {
+        setUser((prev) => {
+          const updated = {
+            ...(prev || {}),
+            email: fetchedEmail,
+          };
+          localStorage.setItem('ps_user_info', JSON.stringify(updated));
+          return updated;
+        });
+        return fetchedEmail;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch sender email via GET /email:', err);
+    }
+    return null;
+  }, []);
 
   const updateApiBaseUrl = useCallback((newUrl) => {
     setApiBaseUrl(newUrl);
@@ -58,18 +79,27 @@ export function AuthProvider({ children }) {
     setAuthError(null);
   }, []);
 
-  const handleAuthSuccess = useCallback((jwtToken, customUsername = null) => {
+  const handleAuthSuccess = useCallback(async (jwtToken, customUsername = null) => {
     setToken(jwtToken);
     localStorage.setItem('ps_auth_token', jwtToken);
 
     const decoded = decodeJwt(jwtToken);
+
+    let senderEmail = decoded?.email || '';
+    try {
+      const fetchedEmail = await fetchUserEmail();
+      if (fetchedEmail) senderEmail = fetchedEmail;
+    } catch {
+      // Ignore fallback
+    }
+
     const resolvedUsername =
       customUsername ||
-      (decoded?.email ? decoded.email.split('@')[0] : `User_${Math.floor(1000 + Math.random() * 9000)}`);
+      (senderEmail ? senderEmail.split('@')[0] : `User_${Math.floor(1000 + Math.random() * 9000)}`);
 
     const userInfo = {
       id: decoded?.sub || 'unknown',
-      email: decoded?.email || '',
+      email: senderEmail,
       username: resolvedUsername,
       exp: decoded?.exp || null,
     };
@@ -106,6 +136,11 @@ export function AuthProvider({ children }) {
       setAuthError(null);
       try {
         const jwtToken = await registerUser(userName, email, password);
+        
+        // Backend /register does not set the auth cookie, but /login does.
+        // We must log in immediately after registration to receive the session cookie.
+        await loginUser(email, password);
+
         handleAuthSuccess(jwtToken, userName);
         return { success: true, token: jwtToken };
       } catch (err) {
@@ -134,7 +169,7 @@ export function AuthProvider({ children }) {
     return await fetchMe(token);
   }, [token]);
 
-  // Sync token validation on initial mount
+  // Sync token validation & fetch sender email strictly via GET /email on initial mount
   useEffect(() => {
     if (token) {
       const decoded = decodeJwt(token);
@@ -144,10 +179,12 @@ export function AuthProvider({ children }) {
         if (decoded.exp < now) {
           console.warn('Session expired. Logging out.');
           logout();
+          return;
         }
       }
+      refreshUserEmail();
     }
-  }, [token, logout]);
+  }, [token, logout, refreshUserEmail]);
 
   const value = {
     token,

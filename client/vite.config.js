@@ -11,19 +11,27 @@ export default defineConfig({
   server: {
     proxy: {
       '/login': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/register': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/me': {
-        target: 'http://127.0.0.1:8000',
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/email': {
+        target: 'http://localhost:8000',
+        changeOrigin: true,
+      },
+      '/username': {
+        target: 'http://localhost:8000',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://127.0.0.1:8000',
+        target: 'ws://localhost:8000',
         ws: true,
         changeOrigin: true,
       },

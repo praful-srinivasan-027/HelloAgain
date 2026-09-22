@@ -6,24 +6,12 @@ export function MessageComposer({
   isConnected,
   isAuthenticated,
   onRequireAuth,
-  prefillValue,
-  onClearPrefill,
+  activeRecipient,
 }) {
   const [text, setText] = useState('');
   const textareaRef = useRef(null);
 
-  // Sync prefill from parent presets
-  useEffect(() => {
-    if (prefillValue) {
-      setText(prefillValue);
-      onClearPrefill();
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-      }
-    }
-  }, [prefillValue, onClearPrefill]);
-
-  // Handle auto-grow
+  // Auto-grow textarea
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -37,9 +25,9 @@ export function MessageComposer({
       return;
     }
     const trimmed = text.trim();
-    if (!trimmed || !isConnected) return;
+    if (!trimmed || !isConnected || !activeRecipient) return;
 
-    onSendMessage(trimmed);
+    onSendMessage(trimmed, activeRecipient.id);
     setText('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -56,22 +44,22 @@ export function MessageComposer({
 
   if (!isAuthenticated) {
     return (
-      <div className="p-4 sm:px-8 bg-black border-t border-white/10 shrink-0">
-        <div className="max-w-4xl mx-auto flex items-center justify-between p-3.5 px-5 bg-white/5 border border-white/20 rounded-[20px]">
+      <div className="p-4 bg-black border-t border-white/10 shrink-0">
+        <div className="max-w-3xl mx-auto flex items-center justify-between p-3 px-5 bg-white/5 border border-white/20 rounded-2xl shadow-lg">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-white/10 text-white flex items-center justify-center">
+            <div className="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center">
               <Lock className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-[13px] font-semibold text-white">Authentication Required</div>
+              <div className="text-[13px] font-semibold text-white">Join the conversation</div>
               <div className="text-[11.5px] text-white/50">
-                You must be logged in to transmit messages over the WebSocket channel.
+                Sign in to send direct messages.
               </div>
             </div>
           </div>
           <button
             onClick={onRequireAuth}
-            className="px-4 py-2 rounded-full bg-white hover:bg-white/90 text-black font-semibold text-[12px] transition-all cursor-pointer active:scale-95 shadow-sm"
+            className="px-4 py-2 rounded-xl bg-white hover:bg-white/90 text-black font-semibold text-xs transition-all cursor-pointer shadow-md"
           >
             Sign In / Register
           </button>
@@ -81,10 +69,9 @@ export function MessageComposer({
   }
 
   return (
-    <div className="p-4 sm:px-8 bg-black border-t border-white/10 shrink-0">
-      <div className="max-w-4xl mx-auto flex flex-col gap-2.5">
-        {/* Input Box */}
-        <div className="flex items-end gap-2 p-2 bg-black border border-white/20 focus-within:border-white rounded-[24px] transition-all">
+    <div className="p-3 sm:p-4 bg-black border-t border-white/10 shrink-0 select-none">
+      <div className="max-w-3xl mx-auto flex flex-col gap-2">
+        <div className="flex items-end gap-2 p-2 bg-black border border-white/20 focus-within:border-white rounded-2xl transition-all shadow-inner">
           <textarea
             ref={textareaRef}
             rows={1}
@@ -92,46 +79,35 @@ export function MessageComposer({
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={
-              isConnected
-                ? 'Type a message or JSON payload (Enter to send, Shift+Enter for newline)...'
-                : 'Connect to WebSocket to start transmitting...'
+              !activeRecipient
+                ? 'Select a user to message...'
+                : isConnected
+                ? `Message ${activeRecipient.id}...`
+                : 'Connecting to server...'
             }
-            disabled={!isConnected}
-            className="flex-1 bg-transparent px-4 py-1.5 text-[15px] sm:text-[16px] text-white placeholder:text-white/40 outline-none resize-none max-h-32 min-h-[28px] font-sans leading-[1.47] tracking-[-0.374px] disabled:opacity-40"
+            disabled={!isConnected || !activeRecipient}
+            className="flex-1 bg-transparent px-3 py-1.5 text-[14px] text-white placeholder:text-white/35 outline-none resize-none max-h-32 min-h-[28px] font-sans leading-relaxed disabled:opacity-40 font-mono"
             spellCheck={false}
           />
 
           <button
             onClick={handleSend}
-            disabled={!isConnected || !text.trim()}
-            title="Send (Enter)"
-            className="p-2.5 rounded-full bg-white hover:bg-white/90 disabled:opacity-20 disabled:hover:bg-white text-black transition-all shrink-0 cursor-pointer disabled:cursor-not-allowed active:scale-95 shadow-sm font-semibold"
+            disabled={!isConnected || !activeRecipient || !text.trim()}
+            title="Send Message"
+            className="p-2.5 rounded-xl bg-white hover:opacity-95 disabled:opacity-30 text-black transition-all shrink-0 cursor-pointer disabled:cursor-not-allowed shadow-md"
           >
-            <Send className="w-4 h-4 fill-current" />
+            <Send className="w-4 h-4 text-black" />
           </button>
         </div>
 
-        {/* Footer Meta */}
-        <div className="flex items-center justify-between text-[12px] text-white/50 tracking-[-0.12px] px-2">
-          <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded-[5px] bg-black text-white font-mono text-[10px] border border-white/20">
-                Enter
-              </kbd>{' '}
-              to transmit
+        {activeRecipient && (
+          <div className="flex items-center justify-between text-[11px] text-white/40 px-2 font-mono">
+            <span>
+              Sending to: <span className="text-white/80">{activeRecipient.id}</span>
             </span>
-            <span className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded-[5px] bg-black text-white font-mono text-[10px] border border-white/20">
-                Shift+Enter
-              </kbd>{' '}
-              for newline
-            </span>
+            <span>Press Enter to send</span>
           </div>
-
-          <div className="flex items-center gap-2 font-mono text-[11px] text-white/50">
-            <span>{text.length} chars</span>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

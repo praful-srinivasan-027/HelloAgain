@@ -1,5 +1,7 @@
 from pydantic import BaseModel
 
 class Message(BaseModel):
-    reciever_id: str
+    JWT_token: str | None = None
+    reciever_email_address: str
+    sender_email_address: str
     content: str
