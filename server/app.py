@@ -1,9 +1,10 @@
-from fastapi import FastAPI, WebSocket, WebSocketException, status, Cookie, Depends, Query
+from fastapi import FastAPI, WebSocket, WebSocketException, HTTPException, status, Cookie, Depends, Query
 from Auth.service import connection_registry, get_current_user, get_user, get_current_user_http
 from db.models import User
 from typing import Annotated
 from schemas import Message
 from Auth.router import chatRouter
+from db.service import getConversation, createConversation, getMessages
 import json
 app = FastAPI(title="Messaging Application")
 app.include_router(chatRouter)
@@ -44,7 +45,10 @@ async def websocket_endpoint(websocket: WebSocket, cookie_or_token: Annotated[st
         print("SENDER:", user.id)
         print("RECIPIENT EMAIL:", message.reciever_email_address)
         reciever_id = get_user(message.reciever_email_address).id
-        print("RECIPIENT ID:", reciever_id)
+        conversation = getConversation(user.id, reciever_id)
+        if conversation is None:
+            conversation = createConversation(user.id, reciever_id)
+        print("RECIPIENT ID:", type(reciever_id))
         print("TARGET SOCKET:", connection_registry.get(reciever_id))
         print("SENDING TO:", reciever_id)
         websocket2 = connection_registry[reciever_id]
@@ -52,12 +56,33 @@ async def websocket_endpoint(websocket: WebSocket, cookie_or_token: Annotated[st
         print(message.model_dump())
         await websocket2.send_json(message.model_dump())
 
-@app.get("/username")
-async def get_username(cookie: Annotated[str | None, Depends(get_cookie_http)]):
+@app.get("/userinfo")
+async def get_user_info(cookie: Annotated[str | None, Depends(get_cookie_http)]):
     user = await get_current_user_http(cookie)
-    return user.username
+    userid = user.id
+    username = user.username
+    email = user.email
+    conversations = getConversation(user.id)
+    conv = []
+    for conversation in conversations:
+        reciever_id = conversation.peer1 if conversation.peer1!=userid else conversation.peer2
+        conversation_id = conversation.id
+        conv.append((reciever_id, conversation_id))
+    return {
+        "username" : username,
+        "email" : email,
+        "all conversation" : conv
+    }
 
-@app.get("/email")
-async def get_email(cookie: Annotated[str | None, Depends(get_cookie_http)]):
+@app.get("/messageHistory")
+async def get_message_history(reciever_email_addr: str, cookie: Annotated[str | None, Depends(get_cookie_http)]):
     user = await get_current_user_http(cookie)
-    return user.email
+    sender_id = user.id
+    reciever_id = get_user(reciever_email_addr).id
+    messages = getMessages(sender_id, reciever_id)
+    message_list = []
+    for message in messages:
+        message_list.append((message.sender_id, message.message_content, message.sent_at))
+    return {
+        "Messages" : message_list
+    }
