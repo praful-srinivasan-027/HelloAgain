@@ -40,7 +40,7 @@ function HelloAgainApp() {
   }, [handleAddConversation]);
 
   const backendWsUrl = import.meta.env.VITE_BACKEND_URL
-    ? import.meta.env.VITE_BACKEND_URL.replace(/^http/, 'ws') + '/ws'
+    ? import.meta.env.VITE_BACKEND_URL.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws'
     : `ws://${window.location.host}/ws`;
 
   const {
