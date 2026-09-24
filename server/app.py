@@ -6,18 +6,7 @@ from schemas import Message
 from Auth.router import chatRouter
 from db.service import getConversation, createConversation, getMessages, createMessage
 import json
-from fastapi.middleware.cors import CORSMiddleware
 app = FastAPI(title="Messaging Application")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:8000"],
-    allow_origin_regex="https://.*\.vercel\.app",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 app.include_router(chatRouter)
 
 @app.get("/")
