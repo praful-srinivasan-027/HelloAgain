@@ -4,6 +4,7 @@ import {
   registerUser,
   fetchMe,
   fetchUserEmail,
+  fetchUserInfo,
   decodeJwt,
   getApiBaseUrl,
   setApiBaseUrl,
@@ -13,6 +14,7 @@ const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(() => localStorage.getItem('ps_auth_token') || null);
+  const [userConversations, setUserConversations] = useState([]);
   const [user, setUser] = useState(() => {
     const savedUser = localStorage.getItem('ps_user_info');
     if (savedUser) {
@@ -43,25 +45,34 @@ export function AuthProvider({ children }) {
   const [authModalInitialTab, setAuthModalInitialTab] = useState('login'); // 'login' | 'register'
   const [apiBaseUrl, setApiBaseUrlState] = useState(getApiBaseUrl());
 
-  const refreshUserEmail = useCallback(async () => {
+  const refreshUserInfoData = useCallback(async () => {
     try {
-      const fetchedEmail = await fetchUserEmail();
-      if (fetchedEmail && typeof fetchedEmail === 'string') {
+      const data = await fetchUserInfo();
+      if (data && data.email) {
         setUser((prev) => {
           const updated = {
-            ...(prev || {}),
-            email: fetchedEmail,
+            id: prev?.id || 'unknown',
+            email: data.email,
+            username: data.username || prev?.username || (data.email ? data.email.split('@')[0] : 'User'),
+            exp: prev?.exp || null,
           };
           localStorage.setItem('ps_user_info', JSON.stringify(updated));
           return updated;
         });
-        return fetchedEmail;
+        if (data['all conversation']) {
+          setUserConversations(data['all conversation']);
+        }
+        return data;
       }
     } catch (err) {
-      console.warn('Failed to fetch sender email via GET /email:', err);
+      console.warn('Failed to fetch user info via GET /userinfo:', err);
     }
     return null;
   }, []);
+
+  const refreshUserEmail = useCallback(async () => {
+    await refreshUserInfoData();
+  }, [refreshUserInfoData]);
 
   const updateApiBaseUrl = useCallback((newUrl) => {
     setApiBaseUrl(newUrl);
@@ -80,26 +91,32 @@ export function AuthProvider({ children }) {
   }, []);
 
   const handleAuthSuccess = useCallback(async (jwtToken, customUsername = null) => {
-    setToken(jwtToken);
-    localStorage.setItem('ps_auth_token', jwtToken);
+    if (jwtToken) {
+      setToken(jwtToken);
+      localStorage.setItem('ps_auth_token', jwtToken);
+    }
 
-    const decoded = decodeJwt(jwtToken);
+    const decoded = jwtToken ? decodeJwt(jwtToken) : null;
+    const userId = decoded?.sub || 'unknown';
 
     let senderEmail = decoded?.email || '';
+    let fetchedData = null;
     try {
-      const fetchedEmail = await fetchUserEmail();
-      if (fetchedEmail) senderEmail = fetchedEmail;
+      fetchedData = await fetchUserInfo();
+      if (fetchedData?.email) senderEmail = fetchedData.email;
+      if (fetchedData?.['all conversation']) setUserConversations(fetchedData['all conversation']);
     } catch {
-      // Ignore fallback
+      // Fallback if userinfo fails
     }
 
     const resolvedUsername =
       customUsername ||
+      fetchedData?.username ||
       (senderEmail ? senderEmail.split('@')[0] : `User_${Math.floor(1000 + Math.random() * 9000)}`);
 
     const userInfo = {
-      id: decoded?.sub || 'unknown',
-      email: senderEmail,
+      id: userId !== 'unknown' ? userId : (user?.id || '1'),
+      email: senderEmail || user?.email || '',
       username: resolvedUsername,
       exp: decoded?.exp || null,
     };
@@ -109,7 +126,7 @@ export function AuthProvider({ children }) {
     localStorage.setItem('ps_username', resolvedUsername);
     setAuthError(null);
     setIsAuthModalOpen(false);
-  }, []);
+  }, [user]);
 
   const login = useCallback(
     async (email, password) => {
@@ -117,7 +134,7 @@ export function AuthProvider({ children }) {
       setAuthError(null);
       try {
         const jwtToken = await loginUser(email, password);
-        handleAuthSuccess(jwtToken);
+        await handleAuthSuccess(jwtToken);
         return { success: true, token: jwtToken };
       } catch (err) {
         const errorMsg = err.message || 'Login failed';
@@ -141,7 +158,7 @@ export function AuthProvider({ children }) {
         // We must log in immediately after registration to receive the session cookie.
         await loginUser(email, password);
 
-        handleAuthSuccess(jwtToken, userName);
+        await handleAuthSuccess(jwtToken, userName);
         return { success: true, token: jwtToken };
       } catch (err) {
         const errorMsg = err.message || 'Registration failed';
@@ -157,6 +174,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
+    setUserConversations([]);
     localStorage.removeItem('ps_auth_token');
     localStorage.removeItem('ps_user_info');
     setAuthError(null);
@@ -169,7 +187,7 @@ export function AuthProvider({ children }) {
     return await fetchMe(token);
   }, [token]);
 
-  // Sync token validation & fetch sender email strictly via GET /email on initial mount
+  // Sync token validation & fetch user info strictly via GET /userinfo on initial mount
   useEffect(() => {
     if (token) {
       const decoded = decodeJwt(token);
@@ -182,14 +200,18 @@ export function AuthProvider({ children }) {
           return;
         }
       }
-      refreshUserEmail();
+      refreshUserInfoData();
+    } else {
+      // Try fetching userinfo with HttpOnly cookie
+      refreshUserInfoData();
     }
-  }, [token, logout, refreshUserEmail]);
+  }, [token, logout, refreshUserInfoData]);
 
   const value = {
     token,
     user,
-    isAuthenticated: Boolean(token),
+    userConversations,
+    isAuthenticated: Boolean(token || user?.email),
     isLoading,
     authError,
     setAuthError,
@@ -203,6 +225,7 @@ export function AuthProvider({ children }) {
     verifyMe,
     apiBaseUrl,
     updateApiBaseUrl,
+    refreshUserInfoData,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

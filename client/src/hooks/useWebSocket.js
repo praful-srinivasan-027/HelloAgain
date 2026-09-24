@@ -9,12 +9,11 @@ export function useWebSocket(
 ) {
   const [url, setUrl] = useState(() => {
     const saved = localStorage.getItem('ps_ws_url');
-    // If there's a saved URL that differs from the default localhost, and it's not the old 8000 port, use it.
-    // Otherwise always use the passed initialUrl.
-    if (saved && !saved.includes('localhost:8000')) {
-      return saved;
+    // If there's a saved URL that uses localhost:8000 or 127.0.0.1:8000, fall back to initialUrl.
+    if (saved && (saved.includes('localhost:8000') || saved.includes('127.0.0.1:8000'))) {
+      return initialUrl;
     }
-    return initialUrl;
+    return saved || initialUrl;
   });
   const [status, setStatus] = useState('disconnected'); // 'connected' | 'connecting' | 'disconnected'
   const [messages, setMessages] = useState([]);
@@ -268,6 +267,7 @@ export function useWebSocket(
       reciever_email_address: targetEmail,
       sender_email_address: senderEmail,
       content: typeof content === 'string' ? content : JSON.stringify(content),
+      sent_at: new Date().toISOString(),
     };
 
     const jsonString = JSON.stringify(payload);
@@ -289,6 +289,17 @@ export function useWebSocket(
     playSendChime(soundEnabled);
     return true;
   }, [addTelemetry, soundEnabled]);
+
+  const loadHistoryMessages = useCallback((historyMessages, conversationId) => {
+    if (!conversationId) return;
+    const cleanConvId = conversationId.toLowerCase();
+    setMessages((prev) => {
+      const otherMessages = prev.filter(
+        (m) => (m.receiverId || '').toLowerCase() !== cleanConvId
+      );
+      return [...otherMessages, ...historyMessages];
+    });
+  }, []);
 
   const clearMessages = useCallback(() => {
     setMessages([]);
@@ -326,6 +337,7 @@ export function useWebSocket(
     connect,
     disconnect,
     sendMessage,
+    loadHistoryMessages,
     clearMessages,
     clearTelemetry,
   };

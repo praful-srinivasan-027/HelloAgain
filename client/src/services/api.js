@@ -94,6 +94,7 @@ export async function loginUser(email, password) {
     headers: {
       'Content-Type': 'application/json',
     },
+    credentials: 'include',
     body: JSON.stringify({ email, password }),
   });
 
@@ -117,6 +118,7 @@ export async function registerUser(userName, email, password) {
     headers: {
       'Content-Type': 'application/json',
     },
+    credentials: 'include',
     body: JSON.stringify({ userName, email, password }),
   });
 
@@ -127,6 +129,45 @@ export async function registerUser(userName, email, password) {
 
   const rawToken = await response.json();
   return cleanTokenResponse(rawToken);
+}
+
+/**
+ * Fetch authenticated user info & existing conversations via GET /userinfo
+ * Uses HttpOnly access_token cookie automatically (credentials: 'include').
+ */
+export async function fetchUserInfo() {
+  const baseUrl = getApiBaseUrl();
+  const response = await fetch(`${baseUrl}/userinfo`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const message = await parseErrorResponse(response);
+    throw new Error(message || 'Failed to fetch user info');
+  }
+
+  return response.json();
+}
+
+/**
+ * Fetch message history for a recipient via GET /messageHistory?reciever_email_addr=<EMAIL>
+ * Uses HttpOnly access_token cookie automatically (credentials: 'include').
+ */
+export async function fetchMessageHistory(receiverEmail) {
+  const baseUrl = getApiBaseUrl();
+  const encodedEmail = encodeURIComponent(receiverEmail);
+  const response = await fetch(`${baseUrl}/messageHistory?reciever_email_addr=${encodedEmail}`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!response.ok) {
+    const message = await parseErrorResponse(response);
+    throw new Error(message || 'Failed to fetch message history');
+  }
+
+  return response.json();
 }
 
 /**
