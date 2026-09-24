@@ -6,7 +6,18 @@ from schemas import Message
 from Auth.router import chatRouter
 from db.service import getConversation, createConversation, getMessages, createMessage
 import json
+from fastapi.middleware.cors import CORSMiddleware
+
 app = FastAPI(title="Messaging Application")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["https://hello-again-omega.vercel.app"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(chatRouter)
 
 @app.get("/")
@@ -50,10 +61,11 @@ async def websocket_endpoint(websocket: WebSocket, cookie_or_token: Annotated[st
         print("RECIPIENT ID:", type(reciever_id))
         print("TARGET SOCKET:", connection_registry.get(reciever_id))
         print("SENDING TO:", reciever_id)
-        websocket2 = connection_registry[reciever_id]
+        websocket2 = connection_registry.get(reciever_id)
         print("SENT")
         print(message.model_dump())
-        await websocket2.send_json(message.model_dump(mode="json"))
+        if websocket2:
+            await websocket2.send_json(message.model_dump(mode="json"))
 
 @app.get("/userinfo")
 async def get_user_info(cookie: Annotated[str | None, Depends(get_cookie_http)]):

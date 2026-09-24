@@ -20,7 +20,7 @@ def login(request: loginRequest, response: Response):
             value=jwt_token,
             secure=True, #TODO: Change to True During Production
             httponly=True,
-            samesite="lax"
+            samesite="none"
         )
         return {"message": "Logged In"}
     raise HTTPException(status_code=401, detail="Authentication Failed")
