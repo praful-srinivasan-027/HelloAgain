@@ -68,6 +68,7 @@ async def get_user_info(cookie: Annotated[str | None, Depends(get_cookie_http)])
         conversation_id = conversation.id
         conv.append((get_user_email(reciever_id), conversation_id))
     return {
+        "id" : userid,
         "username" : username,
         "email" : email,
         "all conversation" : conv
