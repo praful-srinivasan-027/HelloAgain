@@ -189,7 +189,18 @@ export function useWebSocket(
           timestamp: new Date(),
         };
 
-        setMessages((prev) => [...prev, newMessage]);
+        setMessages((prev) => {
+          // Deduplicate if we just sent this exact message optimistically
+          const isDuplicate = prev.some(
+            (m) =>
+              m.content === newMessage.content &&
+              m.type === newMessage.type &&
+              Math.abs(m.timestamp.getTime() - newMessage.timestamp.getTime()) < 3000
+          );
+          if (isDuplicate) return prev;
+          
+          return [...prev, newMessage];
+        });
 
         // Register incoming conversation if callback provided
         if (conversationId) {
