@@ -7,7 +7,7 @@
  * - GET / -> health check
  */
 
-export const DEFAULT_API_URL = import.meta.env.VITE_BACKEND_URL || '';
+export const DEFAULT_API_URL = '';
 
 export function getApiBaseUrl() {
   const custom = localStorage.getItem('ps_api_url');

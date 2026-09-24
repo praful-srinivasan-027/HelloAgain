@@ -39,10 +39,6 @@ function HelloAgainApp() {
     handleAddConversation(conversationId);
   }, [handleAddConversation]);
 
-  const backendWsUrl = import.meta.env.VITE_BACKEND_URL
-    ? import.meta.env.VITE_BACKEND_URL.replace(/^http/, 'ws') + '/ws'
-    : `ws://${window.location.host}/ws`;
-
   const {
     status,
     messages,
@@ -53,7 +49,7 @@ function HelloAgainApp() {
     loadHistoryMessages,
     clearMessages,
   } = useWebSocket(
-    backendWsUrl,
+    `ws://${window.location.host}/ws`,
     activeRecipient?.id || null,
     user,
     handleIncomingMessage
