@@ -18,7 +18,7 @@ def login(request: loginRequest, response: Response):
         response.set_cookie(
             key="access_token",
             value=jwt_token,
-            secure=False, #TODO: Change to True During Production
+            secure=True, #TODO: Change to True During Production
             httponly=True,
             samesite="lax"
         )

@@ -1,10 +1,10 @@
 from fastapi import FastAPI, WebSocket, WebSocketException, HTTPException, status, Cookie, Depends, Query
-from Auth.service import connection_registry, get_current_user, get_user, get_current_user_http
+from Auth.service import connection_registry, get_current_user, get_user, get_current_user_http, get_user_email
 from db.models import User
 from typing import Annotated
 from schemas import Message
 from Auth.router import chatRouter
-from db.service import getConversation, createConversation, getMessages
+from db.service import getConversation, createConversation, getMessages, createMessage
 import json
 app = FastAPI(title="Messaging Application")
 app.include_router(chatRouter)
@@ -45,16 +45,15 @@ async def websocket_endpoint(websocket: WebSocket, cookie_or_token: Annotated[st
         print("SENDER:", user.id)
         print("RECIPIENT EMAIL:", message.reciever_email_address)
         reciever_id = get_user(message.reciever_email_address).id
-        conversation = getConversation(user.id, reciever_id)
-        if conversation is None:
-            conversation = createConversation(user.id, reciever_id)
+        conversation = createConversation(user.id, reciever_id)
+        createMessage(conversation.id, user.id, message.content, message.sent_at)
         print("RECIPIENT ID:", type(reciever_id))
         print("TARGET SOCKET:", connection_registry.get(reciever_id))
         print("SENDING TO:", reciever_id)
         websocket2 = connection_registry[reciever_id]
         print("SENT")
         print(message.model_dump())
-        await websocket2.send_json(message.model_dump())
+        await websocket2.send_json(message.model_dump(mode="json"))
 
 @app.get("/userinfo")
 async def get_user_info(cookie: Annotated[str | None, Depends(get_cookie_http)]):
@@ -67,7 +66,7 @@ async def get_user_info(cookie: Annotated[str | None, Depends(get_cookie_http)])
     for conversation in conversations:
         reciever_id = conversation.peer1 if conversation.peer1!=userid else conversation.peer2
         conversation_id = conversation.id
-        conv.append((reciever_id, conversation_id))
+        conv.append((get_user_email(reciever_id), conversation_id))
     return {
         "username" : username,
         "email" : email,

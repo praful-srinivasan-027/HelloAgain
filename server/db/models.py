@@ -21,15 +21,15 @@ class Conversation(Base):
     __tablename__ = "Conversation"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    peer1: Mapped[int] = mapped_column(ForeignKey("User.id"))
-    peer2: Mapped[int] = mapped_column(ForeignKey("User.id"))
+    peer1: Mapped[int] = mapped_column(ForeignKey("userTable.id"))
+    peer2: Mapped[int] = mapped_column(ForeignKey("userTable.id"))
 
 class MessageHistory(Base):
     __tablename__ = "MessageHistory"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     conversation_id: Mapped[int] = mapped_column(ForeignKey("Conversation.id"))
-    sender_id: Mapped[int] = mapped_column(ForeignKey("User.id"))
+    sender_id: Mapped[int] = mapped_column(ForeignKey("userTable.id"))
     message_content: Mapped[str] = mapped_column(Text, nullable=False)
     sent_at: Mapped[datetime.datetime] = mapped_column(DateTime(timezone=True))
 
