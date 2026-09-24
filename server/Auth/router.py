@@ -18,9 +18,9 @@ def login(request: loginRequest, response: Response):
         response.set_cookie(
             key="access_token",
             value=jwt_token,
-            secure=True, #TODO: Change to True During Production
+            secure=True, 
             httponly=True,
-            samesite="lax"
+            samesite="none"
         )
         return {"message": "Logged In"}
     raise HTTPException(status_code=401, detail="Authentication Failed")
