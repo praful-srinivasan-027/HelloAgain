@@ -13,8 +13,8 @@ export const DEFAULT_API_URL = import.meta.env.VITE_BACKEND_URL
 
 export function getApiBaseUrl() {
   const custom = localStorage.getItem('ps_api_url');
-  if (custom && custom.trim()) {
-    return custom.trim();
+  if (custom !== null && custom !== undefined) {
+    return custom;
   }
   return DEFAULT_API_URL;
 }
