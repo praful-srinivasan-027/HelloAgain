@@ -29,7 +29,7 @@ export function AuthProvider({ children }) {
       const decoded = decodeJwt(initialToken);
       if (decoded) {
         return {
-          id: decoded.sub,
+          id: decoded.sub || decoded.id,
           email: decoded.email || '',
           username: localStorage.getItem('ps_username') || (decoded.email ? decoded.email.split('@')[0] : 'User'),
           exp: decoded.exp,
@@ -97,7 +97,7 @@ export function AuthProvider({ children }) {
     }
 
     const decoded = jwtToken ? decodeJwt(jwtToken) : null;
-    const userId = decoded?.sub || 'unknown';
+    const userId = decoded?.sub || decoded?.id || 'unknown';
 
     let senderEmail = decoded?.email || '';
     let fetchedData = null;
