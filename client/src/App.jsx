@@ -124,6 +124,7 @@ function HelloAgainApp() {
             timestamp: sentAt ? new Date(sentAt) : new Date(),
           };
         });
+        historyList.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
         loadHistoryMessages(historyList, recipientEmail);
       }
     } catch (err) {

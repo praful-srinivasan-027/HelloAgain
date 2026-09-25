@@ -142,6 +142,11 @@ export async function fetchUserInfo() {
   const response = await fetch(`${baseUrl}/userinfo`, {
     method: 'GET',
     credentials: 'include',
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
+    },
   });
 
   if (!response.ok) {
@@ -162,6 +167,11 @@ export async function fetchMessageHistory(receiverEmail) {
   const response = await fetch(`${baseUrl}/messageHistory?reciever_email_addr=${encodedEmail}`, {
     method: 'GET',
     credentials: 'include',
+    headers: {
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0',
+    },
   });
 
   if (!response.ok) {
