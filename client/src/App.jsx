@@ -20,6 +20,11 @@ function HelloAgainApp() {
     const cleanEmail = email.trim().toLowerCase();
     const userEmailKey = user?.email ? user.email.trim().toLowerCase() : null;
 
+    if (userEmailKey && cleanEmail === userEmailKey) {
+      console.warn('Prevented adding self-conversation to sidebar:', cleanEmail);
+      return;
+    }
+
     setConversations((prev) => {
       if (prev.some((c) => c.id === cleanEmail)) return prev;
       const updated = [...prev, { id: cleanEmail, email: cleanEmail }];
@@ -157,7 +162,7 @@ function HelloAgainApp() {
   };
 
   return (
-    <div className="relative flex h-screen w-full bg-[#000000] text-[#f4f4f5] antialiased overflow-hidden font-sans">
+    <div className="relative flex h-screen w-full bg-indigo-950 text-[#f4f4f5] antialiased overflow-hidden font-sans">
       <div className="ambient-glow" />
 
       {/* 1. Email Search & Conversations Sidebar */}
@@ -185,7 +190,7 @@ function HelloAgainApp() {
       </div>
 
       {/* 2. Main Chat Feed & Controls */}
-      <main className="flex-1 flex flex-col min-w-0 bg-[#000000] relative">
+      <main className="flex-1 flex flex-col min-w-0 bg-indigo-950 relative">
         <ChatHeader
           recipient={activeRecipient}
           isConnected={isConnected}
