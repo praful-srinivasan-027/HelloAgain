@@ -51,7 +51,7 @@ export function AuthProvider({ children }) {
       if (data && data.email) {
         setUser((prev) => {
           const updated = {
-            id: data.id ? String(data.id) : (prev?.id || 'unknown'),
+            id: data.id ? String(data.id) : prev?.id,
             email: data.email,
             username: data.username || prev?.username || (data.email ? data.email.split('@')[0] : 'User'),
             exp: prev?.exp || null,
@@ -97,7 +97,7 @@ export function AuthProvider({ children }) {
     }
 
     const decoded = jwtToken ? decodeJwt(jwtToken) : null;
-    const userId = decoded?.sub || decoded?.id || 'unknown';
+    const userId = decoded?.sub || decoded?.id;
 
     let senderEmail = decoded?.email || '';
     let fetchedData = null;
@@ -115,7 +115,7 @@ export function AuthProvider({ children }) {
       (senderEmail ? senderEmail.split('@')[0] : `User_${Math.floor(1000 + Math.random() * 9000)}`);
 
     const userInfo = {
-      id: fetchedData?.id ? String(fetchedData.id) : (userId !== 'unknown' ? userId : (user?.id || '1')),
+      id: fetchedData?.id ? String(fetchedData.id) : (userId ? String(userId) : user?.id),
       email: senderEmail || user?.email || '',
       username: resolvedUsername,
       exp: decoded?.exp || null,
