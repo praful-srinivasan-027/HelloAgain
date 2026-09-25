@@ -162,7 +162,7 @@ function HelloAgainApp() {
   };
 
   return (
-    <div className="relative flex h-screen w-full bg-teal-950 text-[#f4f4f5] antialiased overflow-hidden font-sans">
+    <div className="relative flex h-screen w-full bg-[#000000] text-[#f4f4f5] antialiased overflow-hidden font-sans">
       <div className="ambient-glow" />
 
       {/* 1. Email Search & Conversations Sidebar */}
@@ -190,7 +190,7 @@ function HelloAgainApp() {
       </div>
 
       {/* 2. Main Chat Feed & Controls */}
-      <main className="flex-1 flex flex-col min-w-0 bg-teal-950 relative">
+      <main className="flex-1 flex flex-col min-w-0 bg-[#000000] relative">
         <ChatHeader
           recipient={activeRecipient}
           isConnected={isConnected}
