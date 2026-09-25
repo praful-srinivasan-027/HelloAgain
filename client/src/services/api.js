@@ -139,14 +139,9 @@ export async function registerUser(userName, email, password) {
  */
 export async function fetchUserInfo() {
   const baseUrl = getApiBaseUrl();
-  const response = await fetch(`${baseUrl}/userinfo`, {
+  const response = await fetch(`${baseUrl}/userinfo?_t=${Date.now()}`, {
     method: 'GET',
     credentials: 'include',
-    headers: {
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      Pragma: 'no-cache',
-      Expires: '0',
-    },
   });
 
   if (!response.ok) {
@@ -164,14 +159,9 @@ export async function fetchUserInfo() {
 export async function fetchMessageHistory(receiverEmail) {
   const baseUrl = getApiBaseUrl();
   const encodedEmail = encodeURIComponent(receiverEmail);
-  const response = await fetch(`${baseUrl}/messageHistory?reciever_email_addr=${encodedEmail}`, {
+  const response = await fetch(`${baseUrl}/messageHistory?reciever_email_addr=${encodedEmail}&_t=${Date.now()}`, {
     method: 'GET',
     credentials: 'include',
-    headers: {
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      Pragma: 'no-cache',
-      Expires: '0',
-    },
   });
 
   if (!response.ok) {
