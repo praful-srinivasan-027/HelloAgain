@@ -25,6 +25,17 @@ export function setApiBaseUrl(url) {
   localStorage.setItem('ps_api_url', cleaned);
 }
 
+export function getWsBaseUrl() {
+  const apiUrl = getApiBaseUrl();
+  if (apiUrl) {
+    const wsUrl = apiUrl.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:');
+    return `${wsUrl}/ws`;
+  }
+  const protocol = typeof window !== 'undefined' && window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const host = typeof window !== 'undefined' ? window.location.host : 'localhost:8000';
+  return `${protocol}//${host}/ws`;
+}
+
 /**
  * Safely decodes a JWT without external libraries
  */

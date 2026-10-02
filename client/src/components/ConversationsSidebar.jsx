@@ -7,6 +7,7 @@ export function ConversationsSidebar({
   onSelectRecipient,
   conversations = [],
   onAddConversation,
+  unreadMap = {},
   soundEnabled,
   onToggleSound,
   isConnected,
@@ -19,16 +20,22 @@ export function ConversationsSidebar({
 
   const handleSelectEmail = (emailToSelect) => {
     const email = emailToSelect.trim().toLowerCase();
-    if (!email) return;
+    if (!email || !email.includes('@')) return;
 
-    onAddConversation(email);
-    onSelectRecipient({ id: email, email });
+    const existing = conversations.find((c) => c.id === email);
+    const resolvedUsername = existing?.username || null;
+
+    onAddConversation(email, resolvedUsername);
+    onSelectRecipient({ id: email, email, username: resolvedUsername });
     setSearchQuery('');
   };
 
-  const filteredConversations = conversations.filter((c) =>
-    c.id.toLowerCase().includes(cleanQuery)
-  );
+  const filteredConversations = conversations.filter((c) => {
+    if (!cleanQuery) return true;
+    const emailMatch = c.email ? c.email.toLowerCase().includes(cleanQuery) : false;
+    const usernameMatch = c.username ? c.username.toLowerCase().includes(cleanQuery) : false;
+    return emailMatch || usernameMatch;
+  });
 
   return (
     <aside className="w-80 sm:w-88 h-full glass-panel border-r border-white/10 flex flex-col shrink-0 select-none z-20">
@@ -72,7 +79,7 @@ export function ConversationsSidebar({
                 handleSelectEmail(cleanQuery);
               }
             }}
-            placeholder="userB@email.com..."
+            placeholder="user@example.com..."
             className="w-full bg-white/5 border border-white/10 rounded-2xl pl-10 pr-4 py-2 text-[13px] text-white placeholder:text-white/30 focus:border-white/30 focus:bg-white/[0.08] outline-none transition-all font-mono"
           />
         </div>
@@ -80,11 +87,11 @@ export function ConversationsSidebar({
 
       {/* Search Result & Recent Active Conversations */}
       <div className="flex-1 overflow-y-auto px-2 space-y-2">
-        {/* Dynamic Search Result Match */}
-        {cleanQuery && (
+        {/* Dynamic Search Result Match for starting new conversation */}
+        {cleanQuery && cleanQuery.includes('@') && !conversations.some((c) => c.id === cleanQuery) && (
           <div className="p-1">
             <div className="px-2 py-1 text-[10.5px] font-semibold text-white/40 uppercase tracking-wider mb-1">
-              Matching User
+              Start New Chat
             </div>
             <button
               onClick={() => handleSelectEmail(cleanQuery)}
@@ -98,44 +105,60 @@ export function ConversationsSidebar({
                   {cleanQuery}
                 </div>
                 <div className="text-[11px] text-emerald-300/80 truncate">
-                  Click to open chat session
+                  Start conversation
                 </div>
               </div>
             </button>
           </div>
         )}
 
-        {/* List of active real conversations created during session */}
+        {/* List of active conversations */}
         <div className="px-2 py-1 text-[10.5px] font-semibold text-white/40 uppercase tracking-wider">
-          Active Chats ({conversations.length})
+          Conversations ({conversations.length})
         </div>
 
         {conversations.length === 0 && !cleanQuery ? (
           <div className="p-4 text-center text-xs text-white/40 leading-relaxed">
             No active conversations yet.<br />
-            Enter a user's email above to start.
+            Search for a user by email above to start.
           </div>
         ) : (
           filteredConversations.map((conv) => {
             const isActive = activeRecipient?.id === conv.id;
+            const displayName = conv.username || conv.email || conv.id;
+            const initial = displayName.charAt(0).toUpperCase();
+            const unreadCount = unreadMap[conv.id] || 0;
+
             return (
               <button
                 key={conv.id}
                 onClick={() => onSelectRecipient(conv)}
-                className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-3 p-2.5 rounded-xl text-left transition-all cursor-pointer relative ${
                   isActive
-                    ? 'bg-white/10 border border-white/20 text-white'
+                    ? 'bg-white/10 border border-white/20 text-white shadow-sm'
                     : 'hover:bg-white/5 border border-transparent text-white/70 hover:text-white'
                 }`}
               >
-                <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center text-white font-mono text-xs font-semibold shrink-0">
-                  {conv.id.charAt(0).toUpperCase()}
+                <div className="w-9 h-9 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center text-white text-xs font-semibold shrink-0">
+                  {initial}
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-white truncate font-mono">
-                    {conv.id}
+                  <div className="flex items-center justify-between">
+                    <span className="text-[13px] font-semibold text-white truncate">
+                      {displayName}
+                    </span>
+                    {unreadCount > 0 && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded-full bg-emerald-500 text-black text-[10px] font-bold">
+                        {unreadCount}
+                      </span>
+                    )}
                   </div>
+                  {conv.username && (
+                    <div className="text-[10.5px] text-white/40 truncate font-mono">
+                      {conv.email}
+                    </div>
+                  )}
                 </div>
               </button>
             );
@@ -152,11 +175,20 @@ export function ConversationsSidebar({
               className="w-full flex items-center justify-between p-2 rounded-xl hover:bg-white/5 border border-transparent hover:border-white/10 transition-all cursor-pointer"
             >
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white font-bold text-xs shrink-0 font-mono">
-                  {user?.email ? user.email.charAt(0).toUpperCase() : 'U'}
+                <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/20 flex items-center justify-center text-white font-bold text-xs shrink-0">
+                  {(user?.username || user?.email || 'U').charAt(0).toUpperCase()}
                 </div>
                 <div className="text-left min-w-0">
-                  <div className="text-[12.5px] font-semibold text-white truncate font-mono">
+                  {user?.username && (
+                    <div className="text-[12.5px] font-semibold text-white truncate">
+                      {user.username}
+                    </div>
+                  )}
+                  <div
+                    className={`text-white truncate font-mono ${
+                      user?.username ? 'text-[10.5px] text-white/50' : 'text-[12.5px] font-semibold'
+                    }`}
+                  >
                     {user?.email}
                   </div>
                 </div>
@@ -166,15 +198,20 @@ export function ConversationsSidebar({
 
             {showUserMenu && (
               <div className="absolute bottom-full left-0 mb-2 w-full bg-[#16161a] border border-white/20 rounded-2xl p-2 shadow-2xl space-y-1 z-50">
-                <div className="px-3 py-2 border-b border-white/10 text-xs font-mono truncate text-white/70">
-                  {user?.email}
+                <div className="px-3 py-1.5 border-b border-white/10">
+                  {user?.username && (
+                    <div className="text-xs font-semibold text-white truncate">{user.username}</div>
+                  )}
+                  <div className="text-[10.5px] font-mono text-white/50 truncate">
+                    {user?.email}
+                  </div>
                 </div>
                 <button
                   onClick={onToggleSound}
                   className="w-full flex items-center gap-2.5 px-3 py-2 text-xs text-white/80 hover:text-white hover:bg-white/10 rounded-xl transition-all cursor-pointer"
                 >
                   <Volume2 className="w-4 h-4" />
-                  <span>{soundEnabled ? 'Mute Sounds' : 'Enable Sounds'}</span>
+                  <span>{soundEnabled ? 'Mute Chimes' : 'Enable Chimes'}</span>
                 </button>
                 <button
                   onClick={() => {
@@ -203,3 +240,5 @@ export function ConversationsSidebar({
     </aside>
   );
 }
+
+export default ConversationsSidebar;

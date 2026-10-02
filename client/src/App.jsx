@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useChat } from './hooks/useChat';
+import { getWsBaseUrl } from './services/api';
 import { ConversationsSidebar } from './components/ConversationsSidebar';
 import { ChatHeader } from './components/ChatHeader';
 import { ChatFeed } from './components/ChatFeed';
@@ -9,7 +10,7 @@ import { MessageComposer } from './components/MessageComposer';
 import { AuthModal } from './components/AuthModal';
 
 function HelloAgainApp() {
-  const { user, userConversations, isAuthenticated, openAuthModal } = useAuth();
+  const { user, contacts, isAuthenticated, token, openAuthModal, refreshUserInfo } = useAuth();
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // Core Chat State Management
@@ -25,18 +26,18 @@ function HelloAgainApp() {
     handleIncomingMessage,
     appendOptimisticMessage,
     clearMessages,
-  } = useChat(user, userConversations);
+  } = useChat(user, contacts, refreshUserInfo);
 
   // WebSocket Connection Management
-  const backendWsUrl = import.meta.env.VITE_BACKEND_URL
-    ? import.meta.env.VITE_BACKEND_URL.replace(/^http/, 'ws').replace(/\/+$/, '') + '/ws'
-    : `ws://${window.location.host}/ws`;
+  const backendWsUrl = getWsBaseUrl();
 
-  const { status, sendWsMessage } = useWebSocket(
-    backendWsUrl,
-    handleIncomingMessage,
-    soundEnabled
-  );
+  const { status, sendWsMessage } = useWebSocket({
+    url: backendWsUrl,
+    token,
+    isAuthenticated,
+    onIncomingMessage: handleIncomingMessage,
+    soundEnabled,
+  });
 
   const isConnected = status === 'connected';
 
@@ -62,7 +63,7 @@ function HelloAgainApp() {
     <div className="relative flex h-screen w-full bg-[#000000] text-[#f4f4f5] antialiased overflow-hidden font-sans">
       <div className="ambient-glow" />
 
-      {/* 1. Email Search & Conversations Sidebar */}
+      {/* 1. Conversations Sidebar */}
       <div
         className={`${
           isMobileSidebarOpen ? 'fixed inset-0 z-40 flex' : 'hidden md:flex'

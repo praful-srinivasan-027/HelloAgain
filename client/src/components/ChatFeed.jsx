@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Sparkles, LogIn, UserPlus, Copy, Check } from 'lucide-react';
 
 export function ChatFeed({
-  messages,
+  messages = [],
   isAuthenticated,
   onRequireAuth,
   activeRecipient,
@@ -11,7 +11,7 @@ export function ChatFeed({
   const containerRef = useRef(null);
   const [copiedId, setCopiedId] = React.useState(null);
 
-  // Auto-scroll on new messages
+  // Auto-scroll to bottom on new messages
   useEffect(() => {
     if (containerRef.current) {
       containerRef.current.scrollTop = containerRef.current.scrollHeight;
@@ -71,11 +71,17 @@ export function ChatFeed({
       ) : messages.length === 0 ? (
         <div className="h-full flex flex-col items-center justify-center text-center p-6 max-w-md mx-auto my-auto text-white/60">
           <h3 className="text-lg font-medium text-white mb-1">
-            Chatting with <span className="font-mono text-white">{activeRecipient.id}</span>
+            Chatting with{' '}
+            <span className="font-semibold text-white">
+              {activeRecipient.username || activeRecipient.email || activeRecipient.id}
+            </span>
           </h3>
-          <p className="text-xs text-white/50">
-            No messages yet. Type your message below to send.
-          </p>
+          <div className="text-xs text-white/50">
+            {activeRecipient.username && (
+              <span className="font-mono text-white/30 block mb-1">{activeRecipient.email}</span>
+            )}
+            <span>No messages yet. Type your message below to send.</span>
+          </div>
         </div>
       ) : (
         <AnimatePresence initial={false}>
@@ -99,8 +105,8 @@ export function ChatFeed({
               >
                 <div className={`flex flex-col gap-1 ${isSent ? 'items-end' : 'items-start'}`}>
                   {!isSent && (
-                    <span className="text-[11px] text-white/40 font-mono px-1">
-                      {msg.sender}
+                    <span className="text-[11px] text-white/50 font-medium px-1">
+                      {activeRecipient?.username || activeRecipient?.email || msg.sender}
                     </span>
                   )}
 
@@ -144,3 +150,5 @@ export function ChatFeed({
     </div>
   );
 }
+
+export default ChatFeed;

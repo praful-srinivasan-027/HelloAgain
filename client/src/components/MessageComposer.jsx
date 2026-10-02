@@ -11,7 +11,7 @@ export function MessageComposer({
   const [text, setText] = useState('');
   const textareaRef = useRef(null);
 
-  // Auto-grow textarea
+  // Auto-grow textarea up to 120px
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
@@ -82,11 +82,11 @@ export function MessageComposer({
               !activeRecipient
                 ? 'Select a user to message...'
                 : isConnected
-                ? `Message ${activeRecipient.id}...`
+                ? `Message ${activeRecipient.username || activeRecipient.email || activeRecipient.id}...`
                 : 'Connecting to server...'
             }
             disabled={!isConnected || !activeRecipient}
-            className="flex-1 bg-transparent px-3 py-1.5 text-[14px] text-white placeholder:text-white/35 outline-none resize-none max-h-32 min-h-[28px] font-sans leading-relaxed disabled:opacity-40 font-mono"
+            className="flex-1 bg-transparent px-3 py-1.5 text-[14px] text-white placeholder:text-white/35 outline-none resize-none max-h-32 min-h-[28px] font-sans leading-relaxed disabled:opacity-40"
             spellCheck={false}
           />
 
@@ -101,9 +101,15 @@ export function MessageComposer({
         </div>
 
         {activeRecipient && (
-          <div className="flex items-center justify-between text-[11px] text-white/40 px-2 font-mono">
+          <div className="flex items-center justify-between text-[11px] text-white/40 px-2">
             <span>
-              Sending to: <span className="text-white/80">{activeRecipient.id}</span>
+              Sending to:{' '}
+              <span className="text-white/80">
+                {activeRecipient.username || activeRecipient.email || activeRecipient.id}
+              </span>
+              {activeRecipient.username && (
+                <span className="font-mono ml-1 text-white/40">({activeRecipient.email})</span>
+              )}
             </span>
             <span>Press Enter to send</span>
           </div>
@@ -112,3 +118,5 @@ export function MessageComposer({
     </div>
   );
 }
+
+export default MessageComposer;

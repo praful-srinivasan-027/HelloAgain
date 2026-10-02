@@ -1,27 +1,55 @@
 from fastapi import FastAPI, WebSocket, WebSocketException, HTTPException, status, Cookie, Depends, Query
-from Auth.service import connection_registry, get_current_user, get_user, get_current_user_http, get_user_email
+from Auth.service import connection_registry, get_current_user, get_user, get_username, get_current_user_http, get_user_email
+from contextlib import asynccontextmanager
+import redis
+from Redis.connection import create_client, destroy_client
+from Redis.pubsub import subscribe, publish
 from db.models import User
 from typing import Annotated
 from schemas import Message
 from Auth.router import chatRouter
 from db.service import getConversation, createConversation, getMessages, createMessage
-import json
+import asyncio
 from fastapi.middleware.cors import CORSMiddleware
 
-app = FastAPI(title="Messaging Application")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    app.state.redis = create_client()
+    yield
+    await destroy_client(app.state.redis)
+
+app = FastAPI(title="Messaging Application", lifespan=lifespan)
+
+def get_redis():
+    return app.state.redis
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["https://hello-again-omega.vercel.app"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://hello-again-omega.vercel.app"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 app.include_router(chatRouter)
 
 @app.get("/")
-def heakth_check():
+async def heakth_check(r: Annotated[redis.Redis, Depends(get_redis)]):
+    try:
+        response = await r.ping()
+        print(response)
+    except Exception as e:
+        return {
+            "message" : "hello gng",
+            "error" : "redis is down tho"
+        }
     return {
         "message": "Hello gng"
     }
@@ -44,28 +72,22 @@ async def get_cookie_http(
     return access_token
 
 @app.websocket("/ws")
-async def websocket_endpoint(websocket: WebSocket, cookie_or_token: Annotated[str | None, Depends(get_cookie)]):
-    user = await get_current_user(cookie_or_token)
-    connection_registry[user.id] = websocket
-    print("CONNECTED USER:", user.id)
-    print("REGISTRY:", connection_registry)
-    await websocket.accept()
-    while True:
-        data = await websocket.receive_json()
-        message = Message.model_validate(data)
-        print("SENDER:", user.id)
-        print("RECIPIENT EMAIL:", message.reciever_email_address)
-        reciever_id = get_user(message.reciever_email_address).id
-        conversation = createConversation(user.id, reciever_id)
-        createMessage(conversation.id, user.id, message.content, message.sent_at)
-        print("RECIPIENT ID:", type(reciever_id))
-        print("TARGET SOCKET:", connection_registry.get(reciever_id))
-        print("SENDING TO:", reciever_id)
-        websocket2 = connection_registry.get(reciever_id)
-        print("SENT")
-        print(message.model_dump())
-        if websocket2:
-            await websocket2.send_json(message.model_dump(mode="json"))
+async def websocket_endpoint(websocket: WebSocket, cookie_or_token: Annotated[str | None, Depends(get_cookie)], r: Annotated[redis.Redis, Depends(get_redis)]):
+    try:
+        user = await get_current_user(cookie_or_token)
+        connection_registry[user.id] = websocket
+        print("CONNECTED USER:", user.id)
+        print("REGISTRY:", connection_registry)
+        publish_task = asyncio.create_task(publish(r, user.id, websocket))
+        subscribe_task = asyncio.create_task(subscribe(r, user.id))
+        await asyncio.gather(
+            publish_task,
+            subscribe_task
+        )   
+    finally:
+        publish_task.cancel()
+        subscribe_task.cancel()
+        connection_registry.pop(user.id, None)
 
 @app.get("/userinfo")
 async def get_user_info(cookie: Annotated[str | None, Depends(get_cookie_http)]):
@@ -78,7 +100,7 @@ async def get_user_info(cookie: Annotated[str | None, Depends(get_cookie_http)])
     for conversation in conversations:
         reciever_id = conversation.peer1 if conversation.peer1!=userid else conversation.peer2
         conversation_id = conversation.id
-        conv.append((get_user_email(reciever_id), conversation_id))
+        conv.append((get_username(reciever_id), get_user_email(reciever_id), conversation_id))
     return {
         "id" : userid,
         "username" : username,

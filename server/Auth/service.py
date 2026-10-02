@@ -43,6 +43,12 @@ def get_user_email(id: int) -> str:
         for user in session.scalars(stmt):
             return user.email
 
+def get_username(id: int) ->str:
+    with Session(engine) as session:
+        stmt = Select(User).where(User.id == id)
+        for user in session.scalars(stmt):
+            return user.username
+
 def create_user(userName: str, password: str, email:str):
     if get_user(email_addr=email):
         return False

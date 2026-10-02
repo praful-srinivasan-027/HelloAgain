@@ -2,8 +2,6 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import {
   loginUser,
   registerUser,
-  fetchMe,
-  fetchUserEmail,
   fetchUserInfo,
   decodeJwt,
   getApiBaseUrl,
@@ -12,71 +10,180 @@ import {
 
 const AuthContext = createContext(null);
 
+/**
+ * Parse /userinfo 'all conversation' tuples into clean contact objects.
+ * Backend returns: [username, email, conv_id]
+ * Fallback:        [email, conv_id]
+ */
+function parseContacts(rawList) {
+  if (!Array.isArray(rawList)) return [];
+  const contacts = [];
+  const seenEmails = new Set();
+
+  for (const item of rawList) {
+    if (!item || !Array.isArray(item)) continue;
+    let username = null;
+    let email = null;
+
+    if (item.length >= 3) {
+      username = item[0] ? String(item[0]).trim() : null;
+      email = item[1] ? String(item[1]).trim().toLowerCase() : null;
+    } else if (item.length >= 1) {
+      email = item[0] ? String(item[0]).trim().toLowerCase() : null;
+    }
+
+    if (!email || !email.includes('@')) continue;
+    if (seenEmails.has(email)) continue;
+    seenEmails.add(email);
+
+    contacts.push({
+      id: email,
+      email,
+      username: username || null,
+    });
+  }
+
+  return contacts;
+}
+
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('ps_auth_token') || null);
-  const [userConversations, setUserConversations] = useState([]);
+  const [token, setToken] = useState(() => {
+    const t = localStorage.getItem('ps_auth_token');
+    return t && t.split('.').length === 3 ? t : null;
+  });
+
   const [user, setUser] = useState(() => {
-    const savedUser = localStorage.getItem('ps_user_info');
-    if (savedUser) {
-      try {
-        return JSON.parse(savedUser);
-      } catch {
-        return null;
-      }
-    }
-    const initialToken = localStorage.getItem('ps_auth_token');
-    if (initialToken) {
-      const decoded = decodeJwt(initialToken);
-      if (decoded) {
-        return {
-          id: decoded.sub || decoded.id,
-          email: decoded.email || '',
-          username: localStorage.getItem('ps_username') || (decoded.email ? decoded.email.split('@')[0] : 'User'),
-          exp: decoded.exp,
-        };
-      }
-    }
+    try {
+      const saved = localStorage.getItem('ps_user_info');
+      if (saved) return JSON.parse(saved);
+    } catch {}
     return null;
   });
+
+  // Single source of truth for known contacts from backend /userinfo
+  // NEVER persisted in localStorage to prevent stale cache conflicts.
+  const [contacts, setContacts] = useState([]);
 
   const [isLoading, setIsLoading] = useState(false);
   const [authError, setAuthError] = useState(null);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [authModalInitialTab, setAuthModalInitialTab] = useState('login'); // 'login' | 'register'
+  const [authModalInitialTab, setAuthModalInitialTab] = useState('login');
   const [apiBaseUrl, setApiBaseUrlState] = useState(getApiBaseUrl());
 
-  const refreshUserInfoData = useCallback(async () => {
+  const refreshUserInfo = useCallback(async () => {
     try {
       const data = await fetchUserInfo();
-      if (data && data.email) {
+      if (!data) return null;
+
+      if (data.email) {
         setUser((prev) => {
           const updated = {
-            id: data.id ? String(data.id) : prev?.id,
+            id: data.id != null ? String(data.id) : prev?.id,
             email: data.email,
-            username: data.username || prev?.username || (data.email ? data.email.split('@')[0] : 'User'),
-            exp: prev?.exp || null,
+            username: data.username || prev?.username || data.email.split('@')[0],
           };
           localStorage.setItem('ps_user_info', JSON.stringify(updated));
           return updated;
         });
-        if (data['all conversation']) {
-          setUserConversations(data['all conversation']);
-        }
-        return data;
       }
+
+      if (data['all conversation']) {
+        const parsed = parseContacts(data['all conversation']);
+        setContacts(parsed);
+      }
+
+      return data;
     } catch (err) {
-      console.warn('Failed to fetch user info via GET /userinfo:', err);
+      console.warn('[AuthContext] /userinfo fetch error:', err.message);
+      return null;
     }
-    return null;
   }, []);
 
-  const refreshUserEmail = useCallback(async () => {
-    await refreshUserInfoData();
-  }, [refreshUserInfoData]);
+  // On mount: check token expiration & fetch fresh user info from backend
+  useEffect(() => {
+    if (token) {
+      const decoded = decodeJwt(token);
+      if (decoded?.exp && decoded.exp < Math.floor(Date.now() / 1000)) {
+        console.warn('[AuthContext] Token expired, resetting session');
+        setToken(null);
+        setUser(null);
+        setContacts([]);
+        localStorage.removeItem('ps_auth_token');
+        localStorage.removeItem('ps_user_info');
+        return;
+      }
+    }
+    refreshUserInfo();
+  }, [refreshUserInfo, token]);
 
-  const updateApiBaseUrl = useCallback((newUrl) => {
-    setApiBaseUrl(newUrl);
-    setApiBaseUrlState(newUrl);
+  const handleAuthSuccess = useCallback(async (jwtToken, registeredUsername = null) => {
+    if (jwtToken && typeof jwtToken === 'string' && jwtToken.split('.').length === 3) {
+      setToken(jwtToken);
+      localStorage.setItem('ps_auth_token', jwtToken);
+    }
+
+    const data = await refreshUserInfo();
+
+    // If /userinfo succeeded, user & contacts are already set.
+    // If not, decode token as fallback.
+    if (!data && jwtToken) {
+      const decoded = decodeJwt(jwtToken);
+      if (decoded) {
+        const fallbackUser = {
+          id: decoded.sub || decoded.id,
+          email: decoded.email || '',
+          username: registeredUsername || decoded.email?.split('@')[0] || 'User',
+        };
+        setUser(fallbackUser);
+        localStorage.setItem('ps_user_info', JSON.stringify(fallbackUser));
+      }
+    }
+
+    setAuthError(null);
+    setIsAuthModalOpen(false);
+  }, [refreshUserInfo]);
+
+  const login = useCallback(async (email, password) => {
+    setIsLoading(true);
+    setAuthError(null);
+    try {
+      const jwt = await loginUser(email, password);
+      await handleAuthSuccess(jwt);
+      return { success: true };
+    } catch (err) {
+      const msg = err.message || 'Login failed';
+      setAuthError(msg);
+      return { success: false, error: msg };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [handleAuthSuccess]);
+
+  const register = useCallback(async (userName, email, password) => {
+    setIsLoading(true);
+    setAuthError(null);
+    try {
+      const jwt = await registerUser(userName, email, password);
+      // Establish session cookie
+      await loginUser(email, password);
+      await handleAuthSuccess(jwt, userName);
+      return { success: true };
+    } catch (err) {
+      const msg = err.message || 'Registration failed';
+      setAuthError(msg);
+      return { success: false, error: msg };
+    } finally {
+      setIsLoading(false);
+    }
+  }, [handleAuthSuccess]);
+
+  const logout = useCallback(() => {
+    setToken(null);
+    setUser(null);
+    setContacts([]);
+    localStorage.removeItem('ps_auth_token');
+    localStorage.removeItem('ps_user_info');
+    setAuthError(null);
   }, []);
 
   const openAuthModal = useCallback((tab = 'login') => {
@@ -90,127 +197,15 @@ export function AuthProvider({ children }) {
     setAuthError(null);
   }, []);
 
-  const handleAuthSuccess = useCallback(async (jwtToken, customUsername = null) => {
-    if (jwtToken) {
-      setToken(jwtToken);
-      localStorage.setItem('ps_auth_token', jwtToken);
-    }
-
-    const decoded = jwtToken ? decodeJwt(jwtToken) : null;
-    const userId = decoded?.sub || decoded?.id;
-
-    let senderEmail = decoded?.email || '';
-    let fetchedData = null;
-    try {
-      fetchedData = await fetchUserInfo();
-      if (fetchedData?.email) senderEmail = fetchedData.email;
-      if (fetchedData?.['all conversation']) setUserConversations(fetchedData['all conversation']);
-    } catch {
-      // Fallback if userinfo fails
-    }
-
-    const resolvedUsername =
-      customUsername ||
-      fetchedData?.username ||
-      (senderEmail ? senderEmail.split('@')[0] : `User_${Math.floor(1000 + Math.random() * 9000)}`);
-
-    const userInfo = {
-      id: fetchedData?.id ? String(fetchedData.id) : (userId ? String(userId) : user?.id),
-      email: senderEmail || user?.email || '',
-      username: resolvedUsername,
-      exp: decoded?.exp || null,
-    };
-
-    setUser(userInfo);
-    localStorage.setItem('ps_user_info', JSON.stringify(userInfo));
-    localStorage.setItem('ps_username', resolvedUsername);
-    setAuthError(null);
-    setIsAuthModalOpen(false);
-  }, [user]);
-
-  const login = useCallback(
-    async (email, password) => {
-      setIsLoading(true);
-      setAuthError(null);
-      try {
-        const jwtToken = await loginUser(email, password);
-        await handleAuthSuccess(jwtToken);
-        return { success: true, token: jwtToken };
-      } catch (err) {
-        const errorMsg = err.message || 'Login failed';
-        setAuthError(errorMsg);
-        return { success: false, error: errorMsg };
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [handleAuthSuccess]
-  );
-
-  const register = useCallback(
-    async (userName, email, password) => {
-      setIsLoading(true);
-      setAuthError(null);
-      try {
-        const jwtToken = await registerUser(userName, email, password);
-        
-        // Backend /register does not set the auth cookie, but /login does.
-        // We must log in immediately after registration to receive the session cookie.
-        await loginUser(email, password);
-
-        await handleAuthSuccess(jwtToken, userName);
-        return { success: true, token: jwtToken };
-      } catch (err) {
-        const errorMsg = err.message || 'Registration failed';
-        setAuthError(errorMsg);
-        return { success: false, error: errorMsg };
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [handleAuthSuccess]
-  );
-
-  const logout = useCallback(() => {
-    setToken(null);
-    setUser(null);
-    setUserConversations([]);
-    localStorage.removeItem('ps_auth_token');
-    localStorage.removeItem('ps_user_info');
-    setAuthError(null);
+  const updateApiBaseUrl = useCallback((url) => {
+    setApiBaseUrl(url);
+    setApiBaseUrlState(url);
   }, []);
-
-  const verifyMe = useCallback(async () => {
-    if (!token) {
-      throw new Error('No authentication token present');
-    }
-    return await fetchMe(token);
-  }, [token]);
-
-  // Sync token validation & fetch user info strictly via GET /userinfo on initial mount
-  useEffect(() => {
-    if (token) {
-      const decoded = decodeJwt(token);
-      if (decoded && decoded.exp) {
-        // check if token is expired
-        const now = Math.floor(Date.now() / 1000);
-        if (decoded.exp < now) {
-          console.warn('Session expired. Logging out.');
-          logout();
-          return;
-        }
-      }
-      refreshUserInfoData();
-    } else {
-      // Try fetching userinfo with HttpOnly cookie
-      refreshUserInfoData();
-    }
-  }, [token, logout, refreshUserInfoData]);
 
   const value = {
     token,
     user,
-    userConversations,
+    contacts,
     isAuthenticated: Boolean(token || user?.email),
     isLoading,
     authError,
@@ -222,19 +217,16 @@ export function AuthProvider({ children }) {
     login,
     register,
     logout,
-    verifyMe,
+    refreshUserInfo,
     apiBaseUrl,
     updateApiBaseUrl,
-    refreshUserInfoData,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error('useAuth must be used within an AuthProvider');
+  return ctx;
 }

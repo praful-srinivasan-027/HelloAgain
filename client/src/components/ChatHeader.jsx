@@ -27,8 +27,8 @@ export function ChatHeader({
           {recipient ? (
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-[15px] font-semibold text-white tracking-[-0.2px] leading-tight font-mono">
-                  {recipient.id}
+                <h2 className="text-[15px] font-semibold text-white tracking-[-0.2px] leading-tight">
+                  {recipient.username || recipient.email || recipient.id}
                 </h2>
               </div>
               <div className="flex items-center gap-1.5 text-[11.5px] text-white/50">
@@ -38,6 +38,9 @@ export function ChatHeader({
                   }`}
                 />
                 <span>{isConnected ? 'Realtime Connected' : 'Disconnected'}</span>
+                {recipient.username && (
+                  <span className="font-mono text-white/30">· {recipient.email}</span>
+                )}
               </div>
             </div>
           ) : (
@@ -46,7 +49,7 @@ export function ChatHeader({
                 HelloAgain Messenger
               </h2>
               <div className="flex items-center gap-1.5 text-[11.5px] text-white/40">
-                <span>Search user email to start</span>
+                <span>Search user by email to start</span>
               </div>
             </div>
           )}
@@ -66,7 +69,7 @@ export function ChatHeader({
         {recipient && (
           <button
             onClick={onClearMessages}
-            title="Clear Current Chat Messages"
+            title="Clear Chat Messages"
             className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-white/60 hover:text-white border border-white/10 transition-all cursor-pointer active:scale-95"
           >
             <Trash2 className="w-4 h-4" />
@@ -85,3 +88,5 @@ export function ChatHeader({
     </header>
   );
 }
+
+export default ChatHeader;
