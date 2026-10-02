@@ -23,21 +23,21 @@ app = FastAPI(title="Messaging Application", lifespan=lifespan)
 def get_redis():
     return app.state.redis
 
-# app.add_middleware(
-#     CORSMiddleware,
-#     allow_origins=["https://hello-again-omega.vercel.app"],
-#     allow_credentials=True,
-#     allow_methods=["*"],
-#     allow_headers=["*"],
-# )
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["https://hello-again-omega.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=["http://localhost:5173"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 app.include_router(chatRouter)
 
 @app.get("/")
