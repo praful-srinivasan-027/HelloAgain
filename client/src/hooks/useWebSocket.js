@@ -23,7 +23,7 @@ export function useWebSocket(arg1, arg2, arg3) {
   }
 
   const {
-    url: rawUrl = 'ws://localhost:8000/ws',
+    url: rawUrl = 'wss://helloagain-reverse-proxy.onrender.com/ws',
     token = null,
     isAuthenticated = false,
     onIncomingMessage = null,
