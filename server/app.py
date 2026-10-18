@@ -48,7 +48,8 @@ async def heakth_check(r: Annotated[redis.Redis, Depends(get_redis)]):
     except Exception as e:
         return {
             "message" : "hello gng",
-            "error" : "redis is down tho"
+            "error" : "redis is down tho",
+            "more" : e
         }
     return {
         "message": "Hello gng"
