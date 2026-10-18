@@ -10,7 +10,7 @@ def create_client():
         port=os.getenv("REDIS_PORT"), 
         decode_responses=True,
         username='default',
-        password=os.getenv("REDIS_PASSWORD")
+        password=os.getenv("REDIS_PASSWORD"),
         max_connections=100
     )
     return r
