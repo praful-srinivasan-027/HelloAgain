@@ -10,6 +10,7 @@ from schemas import Message
 from Auth.router import chatRouter
 from db.service import getConversation, createConversation, getMessages, createMessage
 import asyncio
+import traceback
 from fastapi.middleware.cors import CORSMiddleware
 
 @asynccontextmanager
@@ -46,6 +47,7 @@ async def heakth_check(r: Annotated[redis.Redis, Depends(get_redis)]):
         response = await r.ping()
         print(response)
     except Exception as e:
+        traceback.print_exc()
         return {
             "message" : "hello gng",
             "error" : "redis is down tho",
