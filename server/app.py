@@ -1,4 +1,4 @@
-from fastapi import FastAPI, WebSocket, WebSocketException, HTTPException, status, Cookie, Depends, Query
+from fastapi import FastAPI, WebSocket, WebSocketException, HTTPException, status, Response, Cookie, Depends, Query
 from Auth.service import connection_registry, get_current_user, get_user, get_username, get_current_user_http, get_user_email
 from contextlib import asynccontextmanager
 import redis
@@ -40,6 +40,10 @@ app.add_middleware(
 #     allow_headers=["*"],
 # )
 app.include_router(chatRouter)
+
+@app.head("/")
+async def health_check_head():
+    return Response(status_code=200)
 
 @app.get("/")
 async def heakth_check(r: Annotated[redis.Redis, Depends(get_redis)]):
