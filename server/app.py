@@ -26,7 +26,9 @@ def get_redis():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://hello-again-omega.vercel.app"],
+    allow_origins=["https://hello-again-omega.vercel.app",
+    "https://localhost",
+    "capacitor://localhost"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
