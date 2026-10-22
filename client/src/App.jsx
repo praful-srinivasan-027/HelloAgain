@@ -26,6 +26,9 @@ function HelloAgainApp() {
     handleIncomingMessage,
     appendOptimisticMessage,
     clearMessages,
+    loadMoreMessages,
+    hasMore,
+    isLoadingMore,
   } = useChat(user, contacts, refreshUserInfo);
 
   // WebSocket Connection Management
@@ -103,6 +106,9 @@ function HelloAgainApp() {
           isAuthenticated={isAuthenticated}
           onRequireAuth={(tab) => openAuthModal(tab || 'login')}
           activeRecipient={activeRecipient}
+          onLoadMore={loadMoreMessages}
+          hasMore={hasMore}
+          isLoadingMore={isLoadingMore}
         />
 
         <MessageComposer

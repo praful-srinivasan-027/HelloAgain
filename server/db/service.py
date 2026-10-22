@@ -43,7 +43,7 @@ def getMessages(senderId: int, recieverId: int) -> list[MessageHistory]:
                 (Conversation.peer1 == senderId) & (Conversation.peer2 == recieverId),
                 (Conversation.peer1 == recieverId) & (Conversation.peer2 == senderId),
             )
-        )
+        ).order_by(MessageHistory.sent_at.desc())
         return list(session.scalars(stmt))
     
 def createMessage(conversation_ids: int, sender_ids: int, content: str, sent_at_: datetime.datetime) -> bool:

@@ -79,17 +79,46 @@ export function useChat(user, contacts = [], refreshUserInfo = null) {
     [user?.email]
   );
 
+  const [hasMore, setHasMore] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+
   const loadHistory = useCallback(
-    async (recipientEmail) => {
+    async (recipientEmail, beforeId = null) => {
       if (!recipientEmail) return;
+      if (beforeId != null) {
+        setIsLoadingMore(true);
+      }
       try {
-        const data = await fetchMessageHistory(recipientEmail);
+        const PAGE_LIMIT = 50;
+        const data = await fetchMessageHistory(recipientEmail, beforeId, PAGE_LIMIT);
         if (data && Array.isArray(data.Messages)) {
+          if (data.Messages.length < PAGE_LIMIT) {
+            setHasMore(false);
+          } else {
+            setHasMore(true);
+          }
+
           const historyList = data.Messages.map((msgItem, idx) => {
-            const [senderId, content, sentAt] = msgItem;
+            let senderId, content, sentAt, dbId;
+            if (Array.isArray(msgItem)) {
+              senderId = msgItem[0];
+              content = msgItem[1];
+              sentAt = msgItem[2];
+              // Support optional 4th element as database message id if provided by backend
+              if (msgItem.length >= 4) {
+                dbId = typeof msgItem[3] === 'number' ? msgItem[3] : msgItem[0];
+              }
+            } else if (msgItem && typeof msgItem === 'object') {
+              senderId = msgItem.sender_id || msgItem.sender;
+              content = msgItem.message_content || msgItem.content;
+              sentAt = msgItem.sent_at || msgItem.timestamp;
+              dbId = msgItem.id;
+            }
+
             const isSent = String(senderId) === String(user?.id);
             return {
-              id: `hist_${idx}_${sentAt || Date.now()}`,
+              id: dbId ? `db_${dbId}` : `hist_${beforeId || 0}_${idx}_${sentAt || Date.now()}`,
+              dbId: dbId ?? null,
               type: isSent ? 'sent' : 'received',
               sender: isSent ? user?.email : recipientEmail,
               content,
@@ -98,25 +127,54 @@ export function useChat(user, contacts = [], refreshUserInfo = null) {
             };
           });
 
+          // Sort ascending so oldest is top, newest is bottom
           historyList.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
           setMessages((prev) => {
-            const otherMessages = prev.filter(
-              (m) => (m.receiverId || '').toLowerCase() !== recipientEmail.toLowerCase()
-            );
-            return [...otherMessages, ...historyList];
+            if (beforeId != null) {
+              // Prepend older messages avoiding duplicates
+              const existingIds = new Set(prev.map((m) => m.id));
+              const uniqueNew = historyList.filter((m) => !existingIds.has(m.id));
+              const combined = [...uniqueNew, ...prev];
+              combined.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+              return combined;
+            } else {
+              // Fresh load: keep other conversations, replace this one
+              const otherMessages = prev.filter(
+                (m) => (m.receiverId || '').toLowerCase() !== recipientEmail.toLowerCase()
+              );
+              return [...otherMessages, ...historyList];
+            }
           });
+        } else {
+          if (beforeId != null) setHasMore(false);
         }
       } catch (err) {
         console.warn('[useChat] Failed to load message history for', recipientEmail, err);
+      } finally {
+        setIsLoadingMore(false);
       }
     },
     [user?.id, user?.email]
   );
 
+  const loadMoreMessages = useCallback(() => {
+    if (!activeRecipient?.email || isLoadingMore || !hasMore) return;
+    const currentConvoMessages = messages.filter(
+      (m) => (m.receiverId || '').toLowerCase() === activeRecipient.email.toLowerCase()
+    );
+    if (currentConvoMessages.length === 0) return;
+
+    // Find oldest message dbId or use lowest id
+    const oldestMsg = currentConvoMessages[0];
+    const beforeId = oldestMsg?.dbId || null;
+    loadHistory(activeRecipient.email, beforeId);
+  }, [activeRecipient?.email, isLoadingMore, hasMore, messages, loadHistory]);
+
   useEffect(() => {
     if (activeRecipient?.email) {
-      loadHistory(activeRecipient.email);
+      setHasMore(true);
+      loadHistory(activeRecipient.email, null);
       setUnreadMap((prev) => {
         if (!prev[activeRecipient.email]) return prev;
         const next = { ...prev };
@@ -219,6 +277,9 @@ export function useChat(user, contacts = [], refreshUserInfo = null) {
     handleIncomingMessage,
     appendOptimisticMessage,
     clearMessages: () => setMessages([]),
+    loadMoreMessages,
+    hasMore,
+    isLoadingMore,
   };
 }
 

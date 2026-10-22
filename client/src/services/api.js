@@ -164,23 +164,51 @@ export async function fetchUserInfo() {
 }
 
 /**
- * Fetch message history for a recipient via GET /messageHistory?reciever_email_addr=<EMAIL>
+ * Fetch message history for a recipient via POST /messageHistory (falling back to GET)
+ * Supports pagination params: before_id, limit
  * Uses HttpOnly access_token cookie automatically (credentials: 'include').
  */
-export async function fetchMessageHistory(receiverEmail) {
+export async function fetchMessageHistory(receiverEmail, beforeId = null, limit = 50) {
   const baseUrl = getApiBaseUrl();
   const encodedEmail = encodeURIComponent(receiverEmail);
-  const response = await fetch(`${baseUrl}/messageHistory?reciever_email_addr=${encodedEmail}&_t=${Date.now()}`, {
+  const beforeQuery = beforeId != null ? `&before_id=${beforeId}` : '';
+  const postUrl = `${baseUrl}/messageHistory?reciever_email_addr=${encodedEmail}&limit=${limit}${beforeQuery}&_t=${Date.now()}`;
+
+  // Try POST first (matching user's updated backend route)
+  try {
+    const postResponse = await fetch(postUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({
+        reciever_email_addr: receiverEmail,
+        limit,
+        before_id: beforeId,
+      }),
+    });
+
+    if (postResponse.ok) {
+      return await postResponse.json();
+    }
+  } catch (err) {
+    console.warn('[api] POST /messageHistory failed, trying GET fallback:', err);
+  }
+
+  // Fallback to GET
+  const getUrl = `${baseUrl}/messageHistory?reciever_email_addr=${encodedEmail}&limit=${limit}${beforeQuery}&_t=${Date.now()}`;
+  const getResponse = await fetch(getUrl, {
     method: 'GET',
     credentials: 'include',
   });
 
-  if (!response.ok) {
-    const message = await parseErrorResponse(response);
+  if (!getResponse.ok) {
+    const message = await parseErrorResponse(getResponse);
     throw new Error(message || 'Failed to fetch message history');
   }
 
-  return response.json();
+  return getResponse.json();
 }
 
 /**

@@ -1,22 +1,51 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useLayoutEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles, LogIn, UserPlus, Copy, Check } from 'lucide-react';
+import { Sparkles, LogIn, UserPlus, Copy, Check, Loader2 } from 'lucide-react';
 
 export function ChatFeed({
   messages = [],
   isAuthenticated,
   onRequireAuth,
   activeRecipient,
+  onLoadMore,
+  hasMore = false,
+  isLoadingMore = false,
 }) {
   const containerRef = useRef(null);
   const [copiedId, setCopiedId] = React.useState(null);
+  const prevScrollHeightRef = useRef(0);
+  const prevMessagesLengthRef = useRef(0);
+  const isNearBottomRef = useRef(true);
 
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    if (containerRef.current) {
-      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+  // Monitor scroll position
+  const handleScroll = () => {
+    if (!containerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+    isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 120;
+
+    // Trigger loading older messages when near top
+    if (scrollTop < 50 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
+      prevScrollHeightRef.current = scrollHeight;
+      onLoadMore();
     }
-  }, [messages]);
+  };
+
+  // Preserve scroll position when older messages are prepended to the top
+  useLayoutEffect(() => {
+    if (!containerRef.current) return;
+    const container = containerRef.current;
+    const isNewBatchOlder = messages.length > prevMessagesLengthRef.current && !isNearBottomRef.current;
+
+    if (isNewBatchOlder && prevScrollHeightRef.current > 0) {
+      const heightDifference = container.scrollHeight - prevScrollHeightRef.current;
+      container.scrollTop += heightDifference;
+    } else if (isNearBottomRef.current || prevMessagesLengthRef.current === 0) {
+      container.scrollTop = container.scrollHeight;
+    }
+
+    prevScrollHeightRef.current = container.scrollHeight;
+    prevMessagesLengthRef.current = messages.length;
+  }, [messages.length]);
 
   const handleCopy = (id, text) => {
     navigator.clipboard.writeText(text);
@@ -27,8 +56,32 @@ export function ChatFeed({
   return (
     <div
       ref={containerRef}
-      className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 scroll-smooth bg-[#000000]"
+      onScroll={handleScroll}
+      className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#000000]"
     >
+      {/* Top Loading Indicator for Infinite Scroll */}
+      {hasMore && (
+        <div className="flex justify-center py-2">
+          {isLoadingMore ? (
+            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-white/50">
+              <Loader2 className="w-3.5 h-3.5 animate-spin text-white/70" />
+              <span>Loading earlier messages...</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => {
+                if (containerRef.current) {
+                  prevScrollHeightRef.current = containerRef.current.scrollHeight;
+                }
+                onLoadMore?.();
+              }}
+              className="text-[11px] text-white/40 hover:text-white/70 px-3 py-1 rounded-full hover:bg-white/5 transition-all cursor-pointer"
+            >
+              Scroll up or click to load earlier messages
+            </button>
+          )}
+        </div>
+      )}
       {!isAuthenticated ? (
         <div className="h-full flex flex-col items-center justify-center text-center p-6 max-w-md mx-auto my-auto text-white/70">
           <div className="w-16 h-16 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center text-white mb-4">

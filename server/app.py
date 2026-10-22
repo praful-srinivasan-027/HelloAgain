@@ -115,12 +115,12 @@ async def get_user_info(cookie: Annotated[str | None, Depends(get_cookie_http)])
         "all conversation" : conv
     }
 
-@app.get("/messageHistory")
-async def get_message_history(reciever_email_addr: str, cookie: Annotated[str | None, Depends(get_cookie_http)]):
+@app.post("/messageHistory")
+async def get_message_history(reciever_email_addr: str, cookie: Annotated[str | None, Depends(get_cookie_http)], before_id: int | None = None, limit: int = 50):
     user = await get_current_user_http(cookie)
     sender_id = user.id
     reciever_id = get_user(reciever_email_addr).id
-    messages = getMessages(sender_id, reciever_id)
+    messages = getMessages(sender_id, reciever_id, limit, before_id)
     message_list = []
     for message in messages:
         message_list.append((message.sender_id, message.message_content, message.sent_at))
