@@ -177,7 +177,7 @@ export async function fetchUserInfo(token = null) {
 /**
  * Fetch message history for a recipient via POST/GET /messageHistory?reciever_email_addr=<EMAIL>&limit=<N>&before_id=<ID>
  */
-export async function fetchMessageHistory(receiverEmail, token = null, limit = 50, beforeId = null) {
+export async function fetchMessageHistory(receiverEmail, token = null, limit = 20, beforeId = null) {
   const baseUrl = getApiBaseUrl();
   const activeToken = token || getStoredToken();
   const encodedEmail = encodeURIComponent(receiverEmail);
@@ -189,41 +189,25 @@ export async function fetchMessageHistory(receiverEmail, token = null, limit = 5
     headers['Authorization'] = `Bearer ${activeToken}`;
   }
 
-  // First try POST with query param and json body (matching user's updated backend route)
   const postUrl = `${baseUrl}/messageHistory?reciever_email_addr=${encodedEmail}&limit=${limit}${beforeQuery}&_t=${Date.now()}`;
-  try {
-    const postResponse = await fetch(postUrl, {
-      method: 'POST',
-      headers,
-      credentials: 'include',
-      body: JSON.stringify({
-        reciever_email_addr: receiverEmail,
-        limit,
-        before_id: beforeId,
-      }),
-    });
-
-    if (postResponse.ok) {
-      return await postResponse.json();
-    }
-  } catch (e) {
-    console.warn('[api] POST /messageHistory attempt failed, falling back to GET:', e);
-  }
-
-  // Fallback to GET for backward compatibility
-  const getUrl = `${baseUrl}/messageHistory?reciever_email_addr=${encodedEmail}&limit=${limit}${beforeQuery}&_t=${Date.now()}`;
-  const getResponse = await fetch(getUrl, {
-    method: 'GET',
+  const postResponse = await fetch(postUrl, {
+    method: 'POST',
     headers,
     credentials: 'include',
+    body: JSON.stringify({
+      reciever_email_addr: receiverEmail,
+      limit,
+      before_id: beforeId,
+    }),
   });
 
-  if (!getResponse.ok) {
-    const message = await parseErrorResponse(getResponse);
-    throw new Error(message || 'Failed to fetch message history');
+  if (postResponse.ok) {
+    return await postResponse.json();
   }
 
-  return getResponse.json();
+  const errorText = await postResponse.text();
+  console.warn(`[api] POST /messageHistory HTTP ${postResponse.status}:`, errorText);
+  throw new Error(`Failed to fetch message history (${postResponse.status}): ${errorText || postResponse.statusText}`);
 }
 
 /**

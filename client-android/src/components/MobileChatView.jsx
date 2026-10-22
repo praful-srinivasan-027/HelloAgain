@@ -19,10 +19,26 @@ export function MobileChatView({
   const handleScroll = () => {
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 100;
+    isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 120;
 
-    if (scrollTop < 40 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
+    if (scrollTop < 120 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
       prevScrollHeightRef.current = scrollHeight;
+      onLoadMore();
+    }
+  };
+
+  const handleWheel = (e) => {
+    if (!containerRef.current) return;
+    if (e.deltaY < 0 && containerRef.current.scrollTop < 120 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
+      prevScrollHeightRef.current = containerRef.current.scrollHeight;
+      onLoadMore();
+    }
+  };
+
+  const handleTouchMove = () => {
+    if (!containerRef.current) return;
+    if (containerRef.current.scrollTop < 120 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
+      prevScrollHeightRef.current = containerRef.current.scrollHeight;
       onLoadMore();
     }
   };
@@ -59,29 +75,32 @@ export function MobileChatView({
       <div
         ref={containerRef}
         onScroll={handleScroll}
+        onWheel={handleWheel}
+        onTouchMove={handleTouchMove}
         className="flex-1 overflow-y-auto px-3 py-3 space-y-2.5"
       >
         {/* Top Loading Indicator for Infinite Scroll */}
         {hasMore && (
-          <div className="flex justify-center py-1">
-            {isLoadingMore ? (
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-zinc-900 border border-white/10 text-[11px] text-white/50">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-white/70" />
-                <span>Loading earlier messages...</span>
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  if (containerRef.current) {
-                    prevScrollHeightRef.current = containerRef.current.scrollHeight;
-                  }
-                  onLoadMore?.();
-                }}
-                className="text-[10.5px] text-white/40 hover:text-white/60 px-3 py-1 rounded-full hover:bg-white/5 transition-all"
-              >
-                Scroll up to load earlier messages
-              </button>
-            )}
+          <div className="flex justify-center py-1.5">
+            <button
+              onClick={() => {
+                if (containerRef.current) {
+                  prevScrollHeightRef.current = containerRef.current.scrollHeight;
+                }
+                onLoadMore?.();
+              }}
+              disabled={isLoadingMore}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-zinc-900 border border-white/10 text-[11px] text-white/60 hover:text-white/90 active:bg-zinc-800 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isLoadingMore ? (
+                <>
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-white/70" />
+                  <span>Loading earlier messages...</span>
+                </>
+              ) : (
+                <span>↑ Scroll or tap to load earlier messages</span>
+              )}
+            </button>
           </div>
         )}
 

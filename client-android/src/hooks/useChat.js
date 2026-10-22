@@ -82,95 +82,199 @@ export function useChat(user, contacts = [], refreshUserInfo = null) {
 
   const [hasMore, setHasMore] = useState(true);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const isFetchingRef = useRef(false);
+  const historyPoolRef = useRef({});
+  const displayedCountRef = useRef({});
 
-  const loadHistory = useCallback(
-    async (recipientEmail, beforeId = null) => {
-      if (!recipientEmail) return;
-      if (beforeId != null) {
-        setIsLoadingMore(true);
-      }
-      try {
-        const PAGE_LIMIT = 50;
-        const data = await fetchMessageHistory(recipientEmail, null, PAGE_LIMIT, beforeId);
-        if (data && Array.isArray(data.Messages)) {
-          if (data.Messages.length < PAGE_LIMIT) {
-            setHasMore(false);
-          } else {
-            setHasMore(true);
-          }
-
-          const historyList = data.Messages.map((msgItem, idx) => {
-            let senderId, content, sentAt, dbId;
-            if (Array.isArray(msgItem)) {
+  const parseMessageList = useCallback(
+    (rawList, recipientEmail) => {
+      if (!Array.isArray(rawList)) return [];
+      return rawList.map((msgItem, idx) => {
+        let senderId, content, sentAt, dbId = null;
+        if (Array.isArray(msgItem)) {
+          if (msgItem.length >= 4) {
+            if (typeof msgItem[3] === 'number') {
               senderId = msgItem[0];
               content = msgItem[1];
               sentAt = msgItem[2];
-              if (msgItem.length >= 4) {
-                dbId = typeof msgItem[3] === 'number' ? msgItem[3] : msgItem[0];
-              }
-            } else if (msgItem && typeof msgItem === 'object') {
-              senderId = msgItem.sender_id || msgItem.sender;
-              content = msgItem.message_content || msgItem.content;
-              sentAt = msgItem.sent_at || msgItem.timestamp;
-              dbId = msgItem.id;
-            }
-
-            const isSent = String(senderId) === String(user?.id);
-            return {
-              id: dbId ? `db_${dbId}` : `hist_${beforeId || 0}_${idx}_${sentAt || Date.now()}`,
-              dbId: dbId ?? null,
-              type: isSent ? 'sent' : 'received',
-              sender: isSent ? user?.email : recipientEmail,
-              content,
-              receiverId: recipientEmail,
-              timestamp: sentAt ? new Date(sentAt) : new Date(),
-            };
-          });
-
-          historyList.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-
-          setMessages((prev) => {
-            if (beforeId != null) {
-              const existingIds = new Set(prev.map((m) => m.id));
-              const uniqueNew = historyList.filter((m) => !existingIds.has(m.id));
-              const combined = [...uniqueNew, ...prev];
-              combined.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-              return combined;
+              dbId = msgItem[3];
+            } else if (typeof msgItem[0] === 'number' && typeof msgItem[1] === 'number') {
+              dbId = msgItem[0];
+              senderId = msgItem[1];
+              content = msgItem[2];
+              sentAt = msgItem[3];
             } else {
-              const otherMessages = prev.filter(
-                (m) => (m.receiverId || '').toLowerCase() !== recipientEmail.toLowerCase()
-              );
-              return [...otherMessages, ...historyList];
+              senderId = msgItem[0];
+              content = msgItem[1];
+              sentAt = msgItem[2];
             }
+          } else {
+            senderId = msgItem[0];
+            content = msgItem[1];
+            sentAt = msgItem[2];
+          }
+        } else if (msgItem && typeof msgItem === 'object') {
+          senderId = msgItem.sender_id || msgItem.sender;
+          content = msgItem.message_content || msgItem.content;
+          sentAt = msgItem.sent_at || msgItem.timestamp;
+          dbId = msgItem.id ?? null;
+        }
+
+        const isSent = String(senderId) === String(user?.id);
+        const parsedTime = sentAt ? new Date(sentAt) : new Date();
+        const uniqueId = dbId != null
+          ? `db_${dbId}`
+          : `msg_${senderId}_${parsedTime.getTime()}_${idx}`;
+
+        return {
+          id: uniqueId,
+          dbId: dbId ?? null,
+          type: isSent ? 'sent' : 'received',
+          sender: isSent ? user?.email : recipientEmail,
+          content: content || '',
+          receiverId: recipientEmail,
+          timestamp: parsedTime,
+        };
+      });
+    },
+    [user?.id, user?.email]
+  );
+
+  const loadHistory = useCallback(
+    async (recipientEmail, beforeId = null, isPaging = false) => {
+      if (!recipientEmail || isFetchingRef.current) return;
+      const cleanEmail = recipientEmail.trim().toLowerCase();
+      const PAGE_CHUNK = 20;
+
+      // Handle pagination when older messages already exist in client history pool
+      if (isPaging) {
+        const pool = historyPoolRef.current[cleanEmail] || [];
+        const currentShown = displayedCountRef.current[cleanEmail] || PAGE_CHUNK;
+
+        if (currentShown < pool.length) {
+          setIsLoadingMore(true);
+          const nextShown = Math.min(currentShown + PAGE_CHUNK, pool.length);
+          displayedCountRef.current[cleanEmail] = nextShown;
+
+          const sliceToShow = pool.slice(Math.max(0, pool.length - nextShown));
+          setMessages((prev) => {
+            const otherMessages = prev.filter(
+              (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
+            );
+            return [...otherMessages, ...sliceToShow];
           });
+
+          setHasMore(nextShown < pool.length || (pool[0]?.dbId != null));
+          setIsLoadingMore(false);
+          return;
+        }
+
+        if (!beforeId) {
+          setHasMore(false);
+          return;
+        }
+
+        setIsLoadingMore(true);
+      }
+
+      isFetchingRef.current = true;
+      try {
+        const data = await fetchMessageHistory(cleanEmail, null, 50, beforeId);
+        if (data && Array.isArray(data.Messages)) {
+          const parsedBatch = parseMessageList(data.Messages, cleanEmail);
+          parsedBatch.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+          if (isPaging) {
+            const currentPool = historyPoolRef.current[cleanEmail] || [];
+            const existingPoolIds = new Set(currentPool.map((m) => m.id));
+            const freshItems = parsedBatch.filter((m) => !existingPoolIds.has(m.id));
+
+            if (freshItems.length === 0) {
+              setHasMore(false);
+            } else {
+              const updatedPool = [...freshItems, ...currentPool];
+              updatedPool.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+              historyPoolRef.current[cleanEmail] = updatedPool;
+
+              const currentShown = displayedCountRef.current[cleanEmail] || PAGE_CHUNK;
+              const nextShown = currentShown + freshItems.length;
+              displayedCountRef.current[cleanEmail] = nextShown;
+
+              const sliceToShow = updatedPool.slice(Math.max(0, updatedPool.length - nextShown));
+              setMessages((prev) => {
+                const otherMessages = prev.filter(
+                  (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
+                );
+                return [...otherMessages, ...sliceToShow];
+              });
+
+              setHasMore(freshItems.length >= 50 && (freshItems[0]?.dbId != null));
+            }
+          } else {
+            historyPoolRef.current[cleanEmail] = parsedBatch;
+
+            if (parsedBatch.length > PAGE_CHUNK) {
+              displayedCountRef.current[cleanEmail] = PAGE_CHUNK;
+              const initialSlice = parsedBatch.slice(-PAGE_CHUNK);
+              setMessages((prev) => {
+                const otherMessages = prev.filter(
+                  (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
+                );
+                return [...otherMessages, ...initialSlice];
+              });
+              setHasMore(true);
+            } else {
+              displayedCountRef.current[cleanEmail] = parsedBatch.length;
+              setMessages((prev) => {
+                const otherMessages = prev.filter(
+                  (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
+                );
+                return [...otherMessages, ...parsedBatch];
+              });
+              setHasMore(parsedBatch.length === 50 && (parsedBatch[0]?.dbId != null));
+            }
+          }
         } else {
-          if (beforeId != null) setHasMore(false);
+          setHasMore(false);
         }
       } catch (err) {
         console.warn('[useChat] Failed to load history:', err.message);
       } finally {
         setIsLoadingMore(false);
+        isFetchingRef.current = false;
       }
     },
-    [user?.id, user?.email]
+    [parseMessageList]
   );
 
   const loadMoreMessages = useCallback(() => {
-    if (!activeRecipient?.email || isLoadingMore || !hasMore) return;
-    const currentConvoMessages = messages.filter(
-      (m) => (m.receiverId || '').toLowerCase() === activeRecipient.email.toLowerCase()
-    );
-    if (currentConvoMessages.length === 0) return;
+    if (!activeRecipient?.email || isLoadingMore || !hasMore || isFetchingRef.current) return;
+    const cleanEmail = activeRecipient.email.trim().toLowerCase();
+    const pool = historyPoolRef.current[cleanEmail] || [];
+    const currentShown = displayedCountRef.current[cleanEmail] || 20;
 
-    const oldestMsg = currentConvoMessages[0];
-    const beforeId = oldestMsg?.dbId || null;
-    loadHistory(activeRecipient.email, beforeId);
+    if (currentShown < pool.length) {
+      loadHistory(cleanEmail, null, true);
+      return;
+    }
+
+    const currentConvoMessages = messages.filter(
+      (m) => (m.receiverId || '').toLowerCase() === cleanEmail
+    );
+    const oldestMsg = currentConvoMessages[0] || pool[0];
+    const beforeId = oldestMsg?.dbId != null ? oldestMsg.dbId : null;
+
+    if (beforeId != null) {
+      loadHistory(cleanEmail, beforeId, true);
+    } else {
+      setHasMore(false);
+    }
   }, [activeRecipient?.email, isLoadingMore, hasMore, messages, loadHistory]);
 
   useEffect(() => {
     if (activeRecipient?.email) {
       setHasMore(true);
-      loadHistory(activeRecipient.email, null);
+      loadHistory(activeRecipient.email, null, false);
       setUnreadMap((prev) => {
         if (!prev[activeRecipient.email]) return prev;
         const next = { ...prev };
@@ -209,6 +313,10 @@ export function useChat(user, contacts = [], refreshUserInfo = null) {
             Math.abs(m.timestamp.getTime() - newMessage.timestamp.getTime()) < 3000
         );
         if (isDuplicate) return prev;
+        if (historyPoolRef.current[conversationId]) {
+          historyPoolRef.current[conversationId].push(newMessage);
+          displayedCountRef.current[conversationId] = (displayedCountRef.current[conversationId] || 0) + 1;
+        }
         return [...prev, newMessage];
       });
 
@@ -235,17 +343,22 @@ export function useChat(user, contacts = [], refreshUserInfo = null) {
 
   const appendOptimisticMessage = useCallback(
     (content, receiverId, senderEmail) => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: Math.random().toString(36).substring(2, 9),
-          type: 'sent',
-          sender: senderEmail,
-          content,
-          receiverId,
-          timestamp: new Date(),
-        },
-      ]);
+      const cleanConvoId = (receiverId || '').trim().toLowerCase();
+      const newMsg = {
+        id: Math.random().toString(36).substring(2, 9),
+        type: 'sent',
+        sender: senderEmail,
+        content,
+        receiverId: cleanConvoId,
+        timestamp: new Date(),
+      };
+
+      if (historyPoolRef.current[cleanConvoId]) {
+        historyPoolRef.current[cleanConvoId].push(newMsg);
+        displayedCountRef.current[cleanConvoId] = (displayedCountRef.current[cleanConvoId] || 0) + 1;
+      }
+
+      setMessages((prev) => [...prev, newMsg]);
       playSendChime(soundEnabled);
       triggerHaptic('light');
 

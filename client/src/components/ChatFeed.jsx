@@ -23,9 +23,26 @@ export function ChatFeed({
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
     isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 120;
 
-    // Trigger loading older messages when near top
-    if (scrollTop < 50 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
+    // Trigger loading older messages when near top (threshold: 120px)
+    if (scrollTop < 120 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
       prevScrollHeightRef.current = scrollHeight;
+      onLoadMore();
+    }
+  };
+
+  // Also catch upward trackpad/mousewheel scroll when at the very top
+  const handleWheel = (e) => {
+    if (!containerRef.current) return;
+    if (e.deltaY < 0 && containerRef.current.scrollTop < 120 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
+      prevScrollHeightRef.current = containerRef.current.scrollHeight;
+      onLoadMore();
+    }
+  };
+
+  const handleTouchMove = () => {
+    if (!containerRef.current) return;
+    if (containerRef.current.scrollTop < 120 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
+      prevScrollHeightRef.current = containerRef.current.scrollHeight;
       onLoadMore();
     }
   };
@@ -57,29 +74,32 @@ export function ChatFeed({
     <div
       ref={containerRef}
       onScroll={handleScroll}
+      onWheel={handleWheel}
+      onTouchMove={handleTouchMove}
       className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#000000]"
     >
       {/* Top Loading Indicator for Infinite Scroll */}
       {hasMore && (
-        <div className="flex justify-center py-2">
-          {isLoadingMore ? (
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-white/50">
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-white/70" />
-              <span>Loading earlier messages...</span>
-            </div>
-          ) : (
-            <button
-              onClick={() => {
-                if (containerRef.current) {
-                  prevScrollHeightRef.current = containerRef.current.scrollHeight;
-                }
-                onLoadMore?.();
-              }}
-              className="text-[11px] text-white/40 hover:text-white/70 px-3 py-1 rounded-full hover:bg-white/5 transition-all cursor-pointer"
-            >
-              Scroll up or click to load earlier messages
-            </button>
-          )}
+        <div className="flex justify-center py-2 shrink-0">
+          <button
+            onClick={() => {
+              if (containerRef.current) {
+                prevScrollHeightRef.current = containerRef.current.scrollHeight;
+              }
+              onLoadMore?.();
+            }}
+            disabled={isLoadingMore}
+            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-xs text-white/50 hover:text-white/80 transition-all cursor-pointer disabled:opacity-50"
+          >
+            {isLoadingMore ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-white/70" />
+                <span>Loading earlier messages...</span>
+              </>
+            ) : (
+              <span>↑ Scroll or click to load earlier messages</span>
+            )}
+          </button>
         </div>
       )}
       {!isAuthenticated ? (
