@@ -62,7 +62,7 @@ export function MobileChatView({
       isNearBottomRef.current = true;
       isPagingOlderRef.current = false;
     }
-  }, [recipient?.id, recipient?.email]);
+  }, [activeRecipient?.id, activeRecipient?.email]);
 
   useLayoutEffect(() => {
     if (!containerRef.current) return;
