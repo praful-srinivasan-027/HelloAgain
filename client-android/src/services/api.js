@@ -12,6 +12,12 @@ export function getApiBaseUrl() {
     if (custom && custom.trim()) {
       return custom.trim().replace(/\/+$/, '');
     }
+    // When running in a web browser on localhost (not inside native Android shell),
+    // use relative path to route through Vite proxy and avoid browser CORS blocks
+    const isNative = typeof window.Capacitor !== 'undefined' && window.Capacitor.isNativePlatform?.();
+    if (!isNative && window.location.hostname === 'localhost') {
+      return '';
+    }
   }
   return PRODUCTION_ONLINE_URL;
 }
@@ -31,6 +37,9 @@ export function getWsBaseUrl(token = null) {
   let baseWs = PRODUCTION_WS_URL;
   if (apiUrl) {
     baseWs = apiUrl.replace(/^http:/i, 'ws:').replace(/^https:/i, 'wss:') + '/ws';
+  } else if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    baseWs = `${protocol}//${window.location.host}/ws`;
   }
   if (token && typeof token === 'string' && token.includes('.') && token.split('.').length === 3) {
     const sep = baseWs.includes('?') ? '&' : '?';
