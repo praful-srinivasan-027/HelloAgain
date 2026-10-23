@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { fetchMessageHistory } from '../services/api';
 import { playSendChime, playReceiveChime } from '../utils/sound';
 import { triggerHaptic } from '../utils/haptics';
