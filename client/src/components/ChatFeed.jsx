@@ -13,9 +13,25 @@ export function ChatFeed({
 }) {
   const containerRef = useRef(null);
   const [copiedId, setCopiedId] = React.useState(null);
+  const isPagingOlderRef = useRef(false);
   const prevScrollHeightRef = useRef(0);
   const prevMessagesLengthRef = useRef(0);
   const isNearBottomRef = useRef(true);
+  const lastLoadTriggerTimeRef = useRef(0);
+
+  const triggerLoadMore = () => {
+    const now = Date.now();
+    // Throttle triggers to prevent multiple rapid firings from wheel/touch inertia
+    if (now - lastLoadTriggerTimeRef.current < 350) return;
+    if (!hasMore || isLoadingMore || typeof onLoadMore !== 'function') return;
+
+    if (containerRef.current) {
+      prevScrollHeightRef.current = containerRef.current.scrollHeight;
+      isPagingOlderRef.current = true;
+    }
+    lastLoadTriggerTimeRef.current = now;
+    onLoadMore();
+  };
 
   // Monitor scroll position
   const handleScroll = () => {
@@ -24,38 +40,46 @@ export function ChatFeed({
     isNearBottomRef.current = scrollHeight - scrollTop - clientHeight < 120;
 
     // Trigger loading older messages when near top (threshold: 120px)
-    if (scrollTop < 120 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
-      prevScrollHeightRef.current = scrollHeight;
-      onLoadMore();
+    if (scrollTop < 120 && hasMore && !isLoadingMore) {
+      triggerLoadMore();
     }
   };
 
   // Also catch upward trackpad/mousewheel scroll when at the very top
   const handleWheel = (e) => {
     if (!containerRef.current) return;
-    if (e.deltaY < 0 && containerRef.current.scrollTop < 120 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
-      prevScrollHeightRef.current = containerRef.current.scrollHeight;
-      onLoadMore();
+    if (e.deltaY < 0 && containerRef.current.scrollTop < 120 && hasMore && !isLoadingMore) {
+      triggerLoadMore();
     }
   };
 
   const handleTouchMove = () => {
     if (!containerRef.current) return;
-    if (containerRef.current.scrollTop < 120 && hasMore && !isLoadingMore && typeof onLoadMore === 'function') {
-      prevScrollHeightRef.current = containerRef.current.scrollHeight;
-      onLoadMore();
+    if (containerRef.current.scrollTop < 120 && hasMore && !isLoadingMore) {
+      triggerLoadMore();
     }
   };
+
+  // When switching active recipient, jump cleanly to the bottom
+  useEffect(() => {
+    if (containerRef.current) {
+      containerRef.current.scrollTop = containerRef.current.scrollHeight;
+      prevScrollHeightRef.current = containerRef.current.scrollHeight;
+      isNearBottomRef.current = true;
+      isPagingOlderRef.current = false;
+    }
+  }, [activeRecipient?.id, activeRecipient?.email]);
 
   // Preserve scroll position when older messages are prepended to the top
   useLayoutEffect(() => {
     if (!containerRef.current) return;
     const container = containerRef.current;
-    const isNewBatchOlder = messages.length > prevMessagesLengthRef.current && !isNearBottomRef.current;
+    const isNewBatchOlder = isPagingOlderRef.current && messages.length > prevMessagesLengthRef.current;
 
     if (isNewBatchOlder && prevScrollHeightRef.current > 0) {
       const heightDifference = container.scrollHeight - prevScrollHeightRef.current;
       container.scrollTop += heightDifference;
+      isPagingOlderRef.current = false;
     } else if (isNearBottomRef.current || prevMessagesLengthRef.current === 0) {
       container.scrollTop = container.scrollHeight;
     }
@@ -83,10 +107,7 @@ export function ChatFeed({
         <div className="flex justify-center py-2 shrink-0">
           <button
             onClick={() => {
-              if (containerRef.current) {
-                prevScrollHeightRef.current = containerRef.current.scrollHeight;
-              }
-              onLoadMore?.();
+              triggerLoadMore();
             }}
             disabled={isLoadingMore}
             className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/5 hover:bg-white/10 active:bg-white/15 border border-white/10 text-xs text-white/50 hover:text-white/80 transition-all cursor-pointer disabled:opacity-50"

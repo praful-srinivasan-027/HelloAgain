@@ -85,6 +85,8 @@ export function useChat(user, contacts = [], refreshUserInfo = null) {
   const isFetchingRef = useRef(false);
   const historyPoolRef = useRef({});
   const displayedCountRef = useRef({});
+  const serverHasMoreRef = useRef({});
+  const serverRequestedLimitRef = useRef({});
 
   const parseMessageList = useCallback(
     (rawList, recipientEmail) => {
@@ -122,9 +124,11 @@ export function useChat(user, contacts = [], refreshUserInfo = null) {
 
         const isSent = String(senderId) === String(user?.id);
         const parsedTime = sentAt ? new Date(sentAt) : new Date();
+        const contentStr = typeof content === 'string' ? content : JSON.stringify(content || '');
+        const timeKey = !isNaN(parsedTime.getTime()) ? parsedTime.getTime() : String(sentAt);
         const uniqueId = dbId != null
           ? `db_${dbId}`
-          : `msg_${senderId}_${parsedTime.getTime()}_${idx}`;
+          : `msg_${senderId}_${timeKey}_${contentStr.slice(0, 32)}`;
 
         return {
           id: uniqueId,
@@ -141,100 +145,50 @@ export function useChat(user, contacts = [], refreshUserInfo = null) {
   );
 
   const loadHistory = useCallback(
-    async (recipientEmail, beforeId = null, isPaging = false) => {
+    async (recipientEmail, initialLimit = 50) => {
       if (!recipientEmail || isFetchingRef.current) return;
       const cleanEmail = recipientEmail.trim().toLowerCase();
       const PAGE_CHUNK = 20;
 
-      // Handle pagination when older messages already exist in client history pool
-      if (isPaging) {
-        const pool = historyPoolRef.current[cleanEmail] || [];
-        const currentShown = displayedCountRef.current[cleanEmail] || PAGE_CHUNK;
-
-        if (currentShown < pool.length) {
-          setIsLoadingMore(true);
-          const nextShown = Math.min(currentShown + PAGE_CHUNK, pool.length);
-          displayedCountRef.current[cleanEmail] = nextShown;
-
-          const sliceToShow = pool.slice(Math.max(0, pool.length - nextShown));
-          setMessages((prev) => {
-            const otherMessages = prev.filter(
-              (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
-            );
-            return [...otherMessages, ...sliceToShow];
-          });
-
-          setHasMore(nextShown < pool.length || (pool[0]?.dbId != null));
-          setIsLoadingMore(false);
-          return;
-        }
-
-        if (!beforeId) {
-          setHasMore(false);
-          return;
-        }
-
-        setIsLoadingMore(true);
-      }
-
       isFetchingRef.current = true;
+      serverHasMoreRef.current[cleanEmail] = true;
+      serverRequestedLimitRef.current[cleanEmail] = initialLimit;
+
       try {
-        const data = await fetchMessageHistory(cleanEmail, null, 50, beforeId);
+        const data = await fetchMessageHistory(cleanEmail, null, initialLimit, null);
         if (data && Array.isArray(data.Messages)) {
           const parsedBatch = parseMessageList(data.Messages, cleanEmail);
           parsedBatch.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
-          if (isPaging) {
-            const currentPool = historyPoolRef.current[cleanEmail] || [];
-            const existingPoolIds = new Set(currentPool.map((m) => m.id));
-            const freshItems = parsedBatch.filter((m) => !existingPoolIds.has(m.id));
+          if (parsedBatch.length < initialLimit) {
+            serverHasMoreRef.current[cleanEmail] = false;
+          }
 
-            if (freshItems.length === 0) {
-              setHasMore(false);
-            } else {
-              const updatedPool = [...freshItems, ...currentPool];
-              updatedPool.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
-              historyPoolRef.current[cleanEmail] = updatedPool;
+          historyPoolRef.current[cleanEmail] = parsedBatch;
 
-              const currentShown = displayedCountRef.current[cleanEmail] || PAGE_CHUNK;
-              const nextShown = currentShown + freshItems.length;
-              displayedCountRef.current[cleanEmail] = nextShown;
-
-              const sliceToShow = updatedPool.slice(Math.max(0, updatedPool.length - nextShown));
-              setMessages((prev) => {
-                const otherMessages = prev.filter(
-                  (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
-                );
-                return [...otherMessages, ...sliceToShow];
-              });
-
-              setHasMore(freshItems.length >= 50 && (freshItems[0]?.dbId != null));
-            }
+          if (parsedBatch.length > PAGE_CHUNK) {
+            displayedCountRef.current[cleanEmail] = PAGE_CHUNK;
+            const initialSlice = parsedBatch.slice(-PAGE_CHUNK);
+            setMessages((prev) => {
+              const otherMessages = prev.filter(
+                (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
+              );
+              return [...otherMessages, ...initialSlice];
+            });
+            setHasMore(true);
           } else {
-            historyPoolRef.current[cleanEmail] = parsedBatch;
-
-            if (parsedBatch.length > PAGE_CHUNK) {
-              displayedCountRef.current[cleanEmail] = PAGE_CHUNK;
-              const initialSlice = parsedBatch.slice(-PAGE_CHUNK);
-              setMessages((prev) => {
-                const otherMessages = prev.filter(
-                  (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
-                );
-                return [...otherMessages, ...initialSlice];
-              });
-              setHasMore(true);
-            } else {
-              displayedCountRef.current[cleanEmail] = parsedBatch.length;
-              setMessages((prev) => {
-                const otherMessages = prev.filter(
-                  (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
-                );
-                return [...otherMessages, ...parsedBatch];
-              });
-              setHasMore(parsedBatch.length === 50 && (parsedBatch[0]?.dbId != null));
-            }
+            displayedCountRef.current[cleanEmail] = parsedBatch.length;
+            setMessages((prev) => {
+              const otherMessages = prev.filter(
+                (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
+              );
+              return [...otherMessages, ...parsedBatch];
+            });
+            const hasMoreMessages = serverHasMoreRef.current[cleanEmail] !== false && parsedBatch.length > 0;
+            setHasMore(hasMoreMessages);
           }
         } else {
+          serverHasMoreRef.current[cleanEmail] = false;
           setHasMore(false);
         }
       } catch (err) {
@@ -247,29 +201,112 @@ export function useChat(user, contacts = [], refreshUserInfo = null) {
     [parseMessageList]
   );
 
-  const loadMoreMessages = useCallback(() => {
+  const loadMoreMessages = useCallback(async () => {
     if (!activeRecipient?.email || isLoadingMore || !hasMore || isFetchingRef.current) return;
     const cleanEmail = activeRecipient.email.trim().toLowerCase();
+    const PAGE_CHUNK = 20;
     const pool = historyPoolRef.current[cleanEmail] || [];
-    const currentShown = displayedCountRef.current[cleanEmail] || 20;
+    const currentShown = displayedCountRef.current[cleanEmail] || PAGE_CHUNK;
 
+    // 1. If we have more messages already cached in local history pool, reveal the next chunk
     if (currentShown < pool.length) {
-      loadHistory(cleanEmail, null, true);
+      setIsLoadingMore(true);
+      const nextShown = Math.min(currentShown + PAGE_CHUNK, pool.length);
+      displayedCountRef.current[cleanEmail] = nextShown;
+
+      const sliceToShow = pool.slice(Math.max(0, pool.length - nextShown));
+      setMessages((prev) => {
+        const otherMessages = prev.filter(
+          (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
+        );
+        return [...otherMessages, ...sliceToShow];
+      });
+
+      const poolHasMore = nextShown < pool.length;
+      const serverHasMore = serverHasMoreRef.current[cleanEmail] !== false;
+      setHasMore(poolHasMore || serverHasMore);
+      setIsLoadingMore(false);
       return;
     }
 
-    const currentConvoMessages = messages.filter(
-      (m) => (m.receiverId || '').toLowerCase() === cleanEmail
-    );
-    const oldestMsg = currentConvoMessages[0] || pool[0];
-    const beforeId = oldestMsg?.dbId != null ? oldestMsg.dbId : null;
-
-    if (beforeId != null) {
-      loadHistory(cleanEmail, beforeId, true);
-    } else {
+    // 2. Local pool is completely displayed. Check if server might have older messages
+    if (serverHasMoreRef.current[cleanEmail] === false) {
       setHasMore(false);
+      return;
     }
-  }, [activeRecipient?.email, isLoadingMore, hasMore, messages, loadHistory]);
+
+    // 3. Fetch older messages from server
+    isFetchingRef.current = true;
+    setIsLoadingMore(true);
+
+    try {
+      const oldestMsg = pool[0];
+      const beforeId = oldestMsg?.dbId != null ? oldestMsg.dbId : null;
+
+      let data;
+      if (beforeId != null) {
+        // Backend supports before_id
+        data = await fetchMessageHistory(cleanEmail, null, 50, beforeId);
+      } else {
+        // Backend returns 3-tuple without dbId: paginate by requesting larger limit
+        const prevLimit = serverRequestedLimitRef.current[cleanEmail] || Math.max(50, pool.length);
+        const nextLimit = prevLimit + 50;
+        serverRequestedLimitRef.current[cleanEmail] = nextLimit;
+        data = await fetchMessageHistory(cleanEmail, null, nextLimit, null);
+      }
+
+      if (data && Array.isArray(data.Messages)) {
+        const parsedBatch = parseMessageList(data.Messages, cleanEmail);
+        parsedBatch.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+        const existingPoolIds = new Set(pool.map((m) => m.id));
+        const freshItems = parsedBatch.filter((m) => !existingPoolIds.has(m.id));
+
+        if (freshItems.length === 0) {
+          serverHasMoreRef.current[cleanEmail] = false;
+          setHasMore(false);
+        } else {
+          if (beforeId != null) {
+            if (freshItems.length < 50) {
+              serverHasMoreRef.current[cleanEmail] = false;
+            }
+          } else {
+            const currentReqLimit = serverRequestedLimitRef.current[cleanEmail] || 50;
+            if (parsedBatch.length < currentReqLimit) {
+              serverHasMoreRef.current[cleanEmail] = false;
+            }
+          }
+
+          const updatedPool = [...freshItems, ...pool];
+          updatedPool.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+          historyPoolRef.current[cleanEmail] = updatedPool;
+
+          const nextShown = Math.min(currentShown + PAGE_CHUNK, updatedPool.length);
+          displayedCountRef.current[cleanEmail] = nextShown;
+
+          const sliceToShow = updatedPool.slice(Math.max(0, updatedPool.length - nextShown));
+          setMessages((prev) => {
+            const otherMessages = prev.filter(
+              (m) => (m.receiverId || '').toLowerCase() !== cleanEmail
+            );
+            return [...otherMessages, ...sliceToShow];
+          });
+
+          const poolHasMore = nextShown < updatedPool.length;
+          const serverHasMore = serverHasMoreRef.current[cleanEmail] !== false;
+          setHasMore(poolHasMore || serverHasMore);
+        }
+      } else {
+        serverHasMoreRef.current[cleanEmail] = false;
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.warn('[useChat] Failed to load history:', err.message);
+    } finally {
+      setIsLoadingMore(false);
+      isFetchingRef.current = false;
+    }
+  }, [activeRecipient?.email, isLoadingMore, hasMore, parseMessageList]);
 
   useEffect(() => {
     if (activeRecipient?.email) {
