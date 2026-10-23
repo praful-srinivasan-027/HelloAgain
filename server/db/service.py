@@ -36,14 +36,16 @@ def createConversation(senderId: int, recieverId: int) -> Conversation:
         session.commit()
         return getConversation(senderId, recieverId)
 
-def getMessages(senderId: int, recieverId: int) -> list[MessageHistory]:
+def getMessages(senderId: int, recieverId: int, limit: int, before_id: int | None = None) -> list[MessageHistory]:
     with Session(engine) as session:
         stmt = Select(MessageHistory).join(Conversation).where(
             or_(
                 (Conversation.peer1 == senderId) & (Conversation.peer2 == recieverId),
                 (Conversation.peer1 == recieverId) & (Conversation.peer2 == senderId),
             )
-        ).order_by(MessageHistory.sent_at.desc())
+        ).order_by(MessageHistory.sent_at.desc(), MessageHistory.id.desc()).limit(limit)
+        if before_id is not None:
+            stmt = stmt.where(MessageHistory.id < before_id)
         return list(session.scalars(stmt))
     
 def createMessage(conversation_ids: int, sender_ids: int, content: str, sent_at_: datetime.datetime) -> bool:
